@@ -1,8 +1,8 @@
-"""Cœur du serveur (côté PC) : réseau, session Mac, audio, état.
+"""Cœur du serveur (la machine où sont branchés clavier, souris et carte son) :
+réseau, session avec la machine pilotée, audio, état.
 
-Indépendant de Windows pour pouvoir être testé ailleurs : la capture
-clavier/souris (``win_input.InputCapture``) et le presse-papiers sont
-injectés de l'extérieur.
+Indépendant du système : la capture clavier/souris (``platforms.make_capture``)
+et le presse-papiers sont injectés de l'extérieur.
 """
 
 from __future__ import annotations
@@ -18,9 +18,11 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 from . import __version__
+from . import platforms
 from . import protocol as P
 from .dashboard import check
 from .hotkeys import pretty
+from .settings import SettingsMixin
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +70,10 @@ class Session:
             self.sock.close()
 
 
-class Server:
+class Server(SettingsMixin):
+    role = "server"
+    os = platforms.OS  # remplaçable (démo)
+
     def __init__(self, cfg: dict, clipboard: Clipboard | None = None,
                  notify: Callable[[str], None] | None = None):
         self.cfg = cfg
@@ -82,16 +87,17 @@ class Server:
         self.events: queue.SimpleQueue = queue.SimpleQueue()
         self.session: Session | None = None
         self.remote = False
-        self.sound_on = bool(self.acfg["mac_sound"])
+        self.sound_on = bool(self.acfg["sound"])
         self.mic_on = bool(self.acfg["mic"])
         self.audio_status = "désactivé"
         self.sound_device = ""  # nom du périphérique ouvert, pour l'interface
         self.mic_device = ""
         self.sound_error = ""
         self.mic_error = ""
-        self.hotkey_text = self.scfg["hotkey_toggle"] or self.scfg["hotkey_mac"]
+        self.hotkey_text = self.scfg["hotkey_toggle"] or self.scfg["hotkey_remote"]
         self.hotkey_check: Callable[[], dict] | None = None  # fourni par server_win
         self.open_log: Callable[[], None] | None = None
+        self.restart: Callable[[], None] | None = None  # relance après changement de réglages
         self.wake_store: Path | None = None  # où retenir l'adresse du Mac (server_win)
         self.wake_targets: list[dict] = []
         self._wake_until = 0.0
@@ -164,8 +170,9 @@ class Server:
     def status_text(self) -> str:
         s = self.session
         if s is None:
-            return "Réveil du Mac…" if self.waking else "En attente du Mac…"
-        where = "Mac actif" if self.remote else "PC actif"
+            return "Réveil de la machine pilotée…" if self.waking \
+                else "En attente de la machine pilotée…"
+        where = f"Contrôle : {s.name}" if self.remote else "Contrôle : cet ordinateur"
         return f"{where} · {s.name} ({s.addr[0]})"
 
     def local_checks(self) -> list[dict]:
@@ -173,12 +180,12 @@ class Server:
         if self.hotkey_check is not None:
             checks.append(self.hotkey_check())
         if not self.acfg["enabled"]:
-            checks.append(check("pc_audio", "Audio", "off", "Désactivé dans config.toml"))
+            checks.append(check("server_audio", "Audio", "off", "Désactivé (Réglages → Audio)"))
             return checks
-        checks.append(check("pc_out", "Casque (sortie Scarlett)",
+        checks.append(check("server_out", "Sortie audio (casque)",
                             "ok" if self._sound_rx is not None else "error",
                             self.sound_device or self.sound_error or "Démarrage…"))
-        checks.append(check("pc_in", "Micro (entrée Scarlett)",
+        checks.append(check("server_in", "Entrée audio (micro)",
                             "ok" if self._mic_tx is not None else "error",
                             self.mic_device or self.mic_error or "Démarrage…"))
         return checks
@@ -189,40 +196,45 @@ class Server:
         return rx is not None and flowing(rx.last_packet)
 
     def info(self) -> dict:
-        """Ce que le Mac a besoin de savoir pour son interface."""
-        return {"os": "windows", "name": self.name, "hotkey": pretty(self.hotkey_text),
-                "checks": self.local_checks(), "flows": {"sound_rx": self._sound_flowing()}}
+        """Ce que la machine pilotée a besoin de savoir pour son interface."""
+        return {"os": self.os, "name": self.name, "hotkey": pretty(self.hotkey_text),
+                "checks": self.local_checks(), "flows": {"sound_rx": self._sound_flowing()},
+                "audio_master": {"sound": self.sound_on, "mic": self.mic_on},
+                "sound_mode": self.acfg["sound_mode"], "mic_mode": self.acfg["mic_mode"]}
 
     def status(self) -> dict:
         """État complet pour le tableau de bord (voir dashboard.py)."""
         s = self.session
         peer = s.peer_info if s else {}
         if self.waking:
-            link = {"state": "waking", "detail": "Réveil du Mac en cours…",
+            link = {"state": "waking", "detail": "Réveil de la machine pilotée…",
                     "rtt_ms": None, "since": None}
         elif s is not None:
             rtt = f" · {s.rtt_ms:.0f} ms" if s.rtt_ms is not None else ""
             link = {"state": "connected", "detail": f"{s.name} ({s.addr[0]}){rtt}",
                     "rtt_ms": s.rtt_ms, "since": s.since}
         else:
-            link = {"state": "waiting", "detail": "En attente du Mac sur le réseau…",
+            link = {"state": "waiting", "detail": "En attente de la machine pilotée…",
                     "rtt_ms": None, "since": None}
-        checks = [dict(c, machine="pc") for c in self.local_checks()]
-        checks += [dict(c, machine="mac") for c in peer.get("checks", [])]
+        checks = [dict(c, machine="server") for c in self.local_checks()]
+        checks += [dict(c, machine="client") for c in peer.get("checks", [])]
         return {
-            "role": "pc",
+            "role": "server",
             "version": __version__,
             "machines": {
-                "pc": {"name": self.name, "ip": None, "here": True},
-                "mac": {"name": s.name if s else "Mac", "ip": s.addr[0] if s else None,
-                        "here": False},
+                "server": {"name": self.name, "ip": None, "here": True, "os": self.os},
+                "client": {"name": s.name if s else "Machine pilotée",
+                           "ip": s.addr[0] if s else None, "here": False,
+                           "os": peer.get("os", "")},
             },
             "link": link,
-            "active": "mac" if self.remote else "pc",
+            "active": "client" if self.remote else "server",
             "hotkey": pretty(self.hotkey_text),
             "audio": {
                 "enabled": bool(self.acfg["enabled"]),
                 "sound": self.sound_on, "mic": self.mic_on,
+                "sound_mode": self.acfg["sound_mode"], "mic_mode": self.acfg["mic_mode"],
+                "sound_live": self._effective_sound(), "mic_live": self._effective_mic(),
                 "sound_flow": self._sound_flowing() if s else None,
                 "mic_flow": peer.get("flows", {}).get("mic_rx") if s else None,
             },
@@ -233,17 +245,18 @@ class Server:
 
     def action(self, name: str, value=None) -> tuple[bool, str]:
         """Actions déclenchées depuis le tableau de bord."""
-        if name in ("mac", "toggle") and self.session is None \
-                and (name == "mac" or not self.remote):
+        name = {"mac": "client", "pc": "server"}.get(name, name)  # anciens noms
+        if name in ("client", "toggle") and self.session is None \
+                and (name == "client" or not self.remote):
             if self.wake_mac():
-                return True, "Réveil du Mac… la bascule se fera dès qu'il répond."
-            return False, "Le Mac n'est pas connecté."
-        if name in ("mac", "pc", "toggle"):
-            self.on_hotkey(name)
+                return True, "Réveil de la machine pilotée… la bascule se fera dès qu'elle répond."
+            return False, "La machine pilotée n'est pas connectée."
+        if name in ("client", "server", "toggle"):
+            self.on_hotkey({"client": "remote", "server": "local"}.get(name, name))
             return True, ""
         if name in ("sound", "mic"):
             if not self.acfg["enabled"]:
-                return False, "L'audio est désactivé dans config.toml."
+                return False, "L'audio est désactivé (Réglages → Audio)."
             (self.set_sound if name == "sound" else self.set_mic)(bool(value))
             return True, ""
         if name == "open_log" and self.open_log is not None:
@@ -259,14 +272,16 @@ class Server:
     def on_hotkey(self, action: str) -> None:
         if action == "toggle":
             self.request_mode(not self.remote)
-        elif action == "mac":
+        elif action in ("remote", "mac"):
             self.request_mode(True)
-        elif action == "pc":
+        elif action in ("local", "pc"):
             self.request_mode(False)
 
     def on_mode(self, remote: bool) -> None:
         self.remote = remote
         self.events.put(("enter",) if remote else ("leave",))
+        if self.acfg["sound_mode"] == "follow" or self.acfg["mic_mode"] == "follow":
+            self._apply_audio()
         self._changed()
 
     def request_mode(self, remote: bool) -> None:
@@ -280,7 +295,7 @@ class Server:
             return
         if remote and self.session is None:
             if not self.wake_mac():
-                self.notify("Le Mac n'est pas connecté.")
+                self.notify("La machine pilotée n'est pas connectée.")
             return
         if not remote:
             self._wake_until = 0.0  # on abandonne un réveil en cours
@@ -305,8 +320,8 @@ class Server:
         self._wake_until = time.monotonic() + WAKE_TIMEOUT
         self._send_magic()
         if first:
-            log.info("Réveil du Mac demandé")
-            self.notify("Réveil du Mac…")
+            log.info("Réveil de la machine pilotée demandé")
+            self.notify("Réveil de la machine pilotée…")
             self._changed()
         return True
 
@@ -371,13 +386,14 @@ class Server:
         self._udp.bind((self.scfg["bind"], int(self.scfg["audio_port"])))
         errors = []
         try:
-            out_dev = audio.find_device(a["win_output_device"], "output", a["win_hostapi"])
+            out_dev = audio.find_device(a["server_output_device"], "output",
+                                        a["server_hostapi"], empty="default")
             self._sound_rx = audio.AudioReceiver(
                 P.STREAM_MAC_SOUND, out_dev, in_channels=2,
                 device_channels=audio.device_channels(out_dev, "output", 2),
                 sample_rate=rate, block_ms=block, latency_ms=float(a["latency_ms"]),
-                gain=float(a["mac_sound_gain"]))
-            self._sound_rx.enabled = self.sound_on
+                gain=float(a["sound_gain"]))
+            self._sound_rx.enabled = self._effective_sound()
             self._sound_rx.start()
             self.sound_device = audio.device_name(out_dev)
         except Exception as exc:
@@ -386,13 +402,14 @@ class Server:
             errors.append(f"sortie : {exc}")
         try:
             ch = int(a["mic_channel"])
-            in_dev = audio.find_device(a["win_input_device"], "input", a["win_hostapi"])
+            in_dev = audio.find_device(a["server_input_device"], "input",
+                                       a["server_hostapi"], empty="default")
             channels = audio.device_channels(in_dev, "input", max(2, ch))
             self._mic_tx = audio.AudioSender(
                 self._udp, P.STREAM_MIC, in_dev, channels=channels, sample_rate=rate,
                 block_ms=block, select_channel=min(ch, channels) - 1,
                 gain=float(a["mic_gain"]))
-            self._mic_tx.enabled = self.mic_on
+            self._mic_tx.enabled = self._effective_mic()
             self._mic_tx.start()
             self.mic_device = f"{audio.device_name(in_dev)} · entrée {ch}"
         except Exception as exc:
@@ -411,23 +428,38 @@ class Server:
 
     def set_sound(self, on: bool) -> None:
         self.sound_on = on
-        if self._sound_rx is not None:
-            self._sound_rx.enabled = on
-            self._sound_rx.reset()
-        self._send_audio_ctrl()
+        self._apply_audio()
         self._changed()
 
     def set_mic(self, on: bool) -> None:
         self.mic_on = on
-        if self._mic_tx is not None:
-            self._mic_tx.enabled = on
-        self._send_audio_ctrl()
+        self._apply_audio()
         self._changed()
 
+    def _effective_sound(self) -> bool:
+        """Son de la machine pilotée dans le casque : toujours (mix) ou si pilotée (follow)."""
+        return bool(self.acfg["enabled"] and self.sound_on
+                    and (self.acfg["sound_mode"] != "follow" or self.remote))
+
+    def _effective_mic(self) -> bool:
+        return bool(self.acfg["enabled"] and self.mic_on
+                    and (self.acfg["mic_mode"] != "follow" or self.remote))
+
+    def _apply_audio(self) -> None:
+        sound, mic = self._effective_sound(), self._effective_mic()
+        if self._sound_rx is not None and self._sound_rx.enabled != sound:
+            self._sound_rx.enabled = sound
+            self._sound_rx.reset()
+        if self._mic_tx is not None:
+            self._mic_tx.enabled = mic
+        self._send_audio_ctrl()
+        session = self.session
+        if session is not None:
+            self._send_info(session)  # l'interface de l'autre machine suit tout de suite
+
     def _audio_flags(self) -> int:
-        if not self.acfg["enabled"]:
-            return 0
-        return (P.AUDIO_SOUND_ON if self.sound_on else 0) | (P.AUDIO_MIC_ON if self.mic_on else 0)
+        return ((P.AUDIO_SOUND_ON if self._effective_sound() else 0)
+                | (P.AUDIO_MIC_ON if self._effective_mic() else 0))
 
     def _send_audio_ctrl(self) -> None:
         self.events.put(("raw", P.encode(P.AUDIO_CTRL, bytes([self._audio_flags()]))))
@@ -482,8 +514,8 @@ class Server:
         if self._sound_rx is not None:
             self._sound_rx.allowed_ip = addr[0]
             self._sound_rx.reset()
-        log.info("Mac connecté : %s (%s)", name, addr[0])
-        self.notify(f"Mac connecté : {name}")
+        log.info("Machine pilotée connectée : %s (%s)", name, addr[0])
+        self.notify(f"Connecté à {name}")
         if self._wake_until > time.monotonic():
             self._wake_until = 0.0
             log.info("Mac réveillé : bascule demandée pendant le réveil")
@@ -527,7 +559,8 @@ class Server:
                             self.set_sound(not self.sound_on)
                         if bool(flags & P.AUDIO_MIC_ON) != self.mic_on:
                             self.set_mic(not self.mic_on)
-                        self._send_audio_ctrl()  # confirme l'état réel au Mac
+                        self._send_audio_ctrl()  # confirme l'état réel
+                        self._send_info(session)
         except (OSError, ConnectionError):
             pass
         finally:
@@ -549,12 +582,12 @@ class Server:
             self._mic_tx.dest = None
         if self._sound_rx is not None:
             self._sound_rx.allowed_ip = None
-        log.info("Mac déconnecté")
+        log.info("Machine pilotée déconnectée")
         if self.remote and self.input is not None:
             # sécurité : on ne laisse jamais le clavier capturé sans Mac
             self.input.request_mode(False)
         if not self._stop.is_set():
-            self.notify("Mac déconnecté")
+            self.notify("Machine pilotée déconnectée")
         self._changed()
 
     def _send(self, data: bytes) -> None:
@@ -617,8 +650,8 @@ class Server:
                         self._send_magic()  # certains Mac ne se réveillent qu'au 2e ou 3e paquet
                     else:
                         self._wake_until = 0.0
-                        log.warning("Le Mac ne s'est pas réveillé")
-                        self.notify("Le Mac ne s'est pas réveillé.")
+                        log.warning("La machine pilotée ne s'est pas réveillée")
+                        self.notify("La machine pilotée ne s'est pas réveillée.")
                         self._changed()
                 continue
             if time.monotonic() - s.last_rx > DEAD_AFTER:

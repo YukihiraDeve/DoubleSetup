@@ -55,24 +55,26 @@ def test_page_embeds_token_and_status_is_consistent(dashes):
     assert code == 200 and d_pc.token.encode() in page and b"{{TOKEN}}" not in page
 
     pc = status(d_pc)
-    assert pc["role"] == "pc" and pc["link"]["state"] == "connected" and pc["active"] == "pc"
-    assert pc["machines"]["pc"]["here"] and not pc["machines"]["mac"]["here"]
+    assert pc["role"] == "server" and pc["link"]["state"] == "connected"
+    assert pc["active"] == "server"
+    assert pc["machines"]["server"]["here"] and not pc["machines"]["client"]["here"]
     assert pc["hotkey"] == "Ctrl + Alt + Espace"
 
     # le Mac connaît le raccourci et l'état du PC ; le PC voit les vérifications du Mac
     assert wait_for(lambda: status(d_mac)["hotkey"] == "Ctrl + Alt + Espace")
-    assert wait_for(lambda: any(c["machine"] == "mac" and c["id"] == "accessibility"
+    assert wait_for(lambda: any(c["machine"] == "client" and c["id"] == "permission"
                                 and c["state"] == "ok" for c in status(d_pc)["checks"]))
     mac = status(d_mac)
-    assert mac["role"] == "mac" and mac["link"]["state"] == "connected"
-    assert mac["machines"]["mac"]["here"]
+    assert mac["role"] == "client" and mac["link"]["state"] == "connected"
+    assert mac["machines"]["client"]["here"]
+    assert mac["machines"]["server"]["os"] == mac["machines"]["client"]["os"]
 
 
 def test_switch_from_pc_dashboard(dashes):
     server, client, d_pc, d_mac = dashes
     assert post(d_pc, "mac") == (200, {"ok": True, "message": ""})
     assert wait_for(lambda: client.active)
-    assert status(d_mac)["active"] == "mac"
+    assert status(d_mac)["active"] == "client"
     post(d_pc, "pc")
     assert wait_for(lambda: not client.active)
 
@@ -113,16 +115,16 @@ def test_refuses_without_token_or_foreign_host(dashes):
 
 def test_mac_dashboard_without_connection():
     from test_integration import make_cfg
-    from setupdouble.client_mac import Client, RecordingInjector
+    from setupdouble.client import Client, RecordingInjector
 
     client = Client(make_cfg(), RecordingInjector(), use_audio=False)
     d = dashboard.Dashboard(client, 0).start()
     try:
         s = status(d)
-        assert s["link"]["state"] == "searching" and s["active"] == "pc"
-        assert all(c["machine"] == "mac" for c in s["checks"])
+        assert s["link"]["state"] == "searching" and s["active"] == "server"
+        assert all(c["machine"] == "client" for c in s["checks"])
         code, body = post(d, "mac")
-        assert code == 409 and "pas connecté" in body["message"]
+        assert code == 409 and "Pas connecté" in body["message"]
     finally:
         d.stop()
 

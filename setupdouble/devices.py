@@ -29,19 +29,18 @@ def main() -> int:
     from .audio import find_device
 
     a = cfg["audio"]
-    if sys.platform == "win32":
-        wanted = [("Sortie casque", a["win_output_device"], "output", a["win_hostapi"]),
-                  ("Entrée micro", a["win_input_device"], "input", a["win_hostapi"])]
-    else:
-        wanted = [("Capture du son du Mac", a["mac_capture_device"], "input", None),
-                  ("Micro virtuel", a["mac_mic_device"], "output", None)]
+    wanted = [("Sortie (serveur)", a["server_output_device"], "output", a["server_hostapi"]),
+              ("Entrée micro (serveur)", a["server_input_device"], "input", a["server_hostapi"]),
+              ("Capture du son (pilotée)", a["client_capture_device"], "input", None),
+              ("Micro virtuel (pilotée)", a["client_mic_device"], "output", None)]
     print("\nSélection selon config.toml :")
     for label, name, kind, api in wanted:
         try:
-            idx = find_device(name, kind, api)
-            print(f"  {label:<22} -> [{idx}] {sd.query_devices(idx)['name']}")
+            idx = find_device(name, kind, api or None,
+                              empty="default" if "serveur" in label else "error")
+            print(f"  {label:<26} -> [{idx}] {sd.query_devices(idx)['name']}")
         except RuntimeError:
-            print(f"  {label:<22} -> INTROUVABLE (« {name} »)")
+            print(f"  {label:<26} -> {'non configuré' if not name else f'INTROUVABLE (« {name} »)'}")
     return 0
 
 

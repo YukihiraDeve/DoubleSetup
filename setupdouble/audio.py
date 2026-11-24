@@ -97,7 +97,8 @@ def apply_gain(frames: np.ndarray, gain: float) -> np.ndarray:
 
 # --- Sélection des périphériques -----------------------------------------------
 
-def find_device(name: str, kind: str, hostapi: str | None = None) -> int:
+def find_device(name: str, kind: str, hostapi: str | None = None,
+                empty: str = "error") -> int:
     """Retourne l'index du premier périphérique dont le nom contient ``name``.
 
     ``name`` peut proposer plusieurs essais séparés par « | » (ex.
@@ -108,6 +109,13 @@ def find_device(name: str, kind: str, hostapi: str | None = None) -> int:
     import sounddevice as sd
 
     key = "max_input_channels" if kind == "input" else "max_output_channels"
+    if not name.strip():
+        if empty != "default":
+            raise RuntimeError(f"aucun périphérique {kind} configuré")
+        default = sd.default.device[0 if kind == "input" else 1]
+        if default is None or default < 0:
+            raise RuntimeError(f"pas de périphérique {kind} par défaut")
+        return int(default)
     apis = sd.query_hostapis()
     devices = list(enumerate(sd.query_devices()))
     candidates = []
@@ -293,6 +301,23 @@ def udp_listener(sock: socket.socket, handler: Callable[[bytes, tuple], None],
     t = threading.Thread(target=run, name="udp-audio", daemon=True)
     t.start()
     return t
+
+
+def list_devices(kind: str, hostapi: str | None = None) -> list[str]:
+    """Noms des périphériques d'entrée ou de sortie (sans doublons), pour l'interface."""
+    import sounddevice as sd
+
+    key = "max_input_channels" if kind == "input" else "max_output_channels"
+    apis = sd.query_hostapis()
+    names: list[str] = []
+    for dev in sd.query_devices():
+        if dev[key] <= 0:
+            continue
+        if hostapi and hostapi.lower() not in apis[dev["hostapi"]]["name"].lower():
+            continue
+        if dev["name"] not in names:
+            names.append(dev["name"])
+    return names
 
 
 def flowing(timestamp: float, within: float = 1.5) -> bool:

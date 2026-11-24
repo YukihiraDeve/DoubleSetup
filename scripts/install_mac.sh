@@ -1,74 +1,91 @@
 #!/usr/bin/env bash
-# SetupDouble – installation sur le Mac.
-#   ./scripts/install_mac.sh [--secret LE_SECRET_DU_PC] [--no-audio] [--no-autostart]
+# SetupDouble – installation sur macOS (appelé par ./install.sh).
+#   ./scripts/install_mac.sh [--role client|server] [--secret CLÉ] [--no-audio] [--no-autostart]
 #
-# Ce script :
-#   1. installe BlackHole 2ch + 16ch et SwitchAudioSource (Homebrew)
-#   2. crée l'environnement Python (.venv) et installe les dépendances
-#   3. crée config.toml avec le secret du PC
-#   4. installe un LaunchAgent : l'agent démarre à l'ouverture de session
-#   5. crée l'app « SetupDouble » (fenêtre de statut) dans ~/Applications
+#   client (défaut) : ce Mac est piloté par le clavier/la souris d'une autre machine
+#   server          : clavier, souris et carte son sont branchés sur ce Mac
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+ROLE="client"
 SECRET=""
 AUDIO=1
 AUTOSTART=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --role) ROLE="$2"; shift 2 ;;
     --secret) SECRET="$2"; shift 2 ;;
     --no-audio) AUDIO=0; shift ;;
     --no-autostart) AUTOSTART=0; shift ;;
     *) echo "option inconnue : $1"; exit 1 ;;
   esac
 done
+[[ "$ROLE" == "client" || "$ROLE" == "server" ]] || { echo "--role : client ou server"; exit 1; }
 
-command -v brew >/dev/null || { echo "Homebrew est requis : https://brew.sh"; exit 1; }
+say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 
-# Le secret est vérifié AVANT les installations, pour ne pas échouer au milieu.
+# --- La clé est vérifiée AVANT les installations, pour ne pas échouer au milieu
+GENERATED=0
 if [[ ! -f config.toml ]]; then
+  if [[ "$ROLE" == "server" && -z "$SECRET" ]]; then
+    SECRET="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+    GENERATED=1
+  fi
   if [[ -z "$SECRET" ]]; then
-    read -r -p "Colle le secret affiché par l'installation Windows : " SECRET
+    read -r -p "Colle la clé affichée par l'installation du serveur : " SECRET
   fi
   case "$SECRET" in
-    LE_SECRET*|change-me|"")
-      echo "Remplace LE_SECRET par le vrai secret affiché par install_windows.ps1 sur le PC."; exit 1 ;;
+    LE_SECRET*|change-me|"") echo "Il faut la vraie clé affichée par l'installation du serveur."; exit 1 ;;
   esac
-  [[ ${#SECRET} -ge 12 ]] || { echo "Secret trop court (12 caractères minimum)."; exit 1; }
+  [[ ${#SECRET} -ge 12 ]] || { echo "Clé trop courte (12 caractères minimum)."; exit 1; }
   [[ "$SECRET" =~ ^[A-Za-z0-9_.-]+$ ]] || {
-    echo "Le secret ne doit contenir que des lettres, chiffres, '.', '_' ou '-'."; exit 1; }
+    echo "La clé ne doit contenir que des lettres, chiffres, '.', '_' ou '-'."; exit 1; }
 fi
 
-if [[ $AUDIO == 1 ]]; then
-  echo "== 1/5 Pilotes audio virtuels (mot de passe administrateur demandé par macOS)"
+AUDIO_DRIVERS=$AUDIO
+if ! command -v brew >/dev/null; then
+  echo "Homebrew (https://brew.sh) est conseillé : sans lui, pas d'audio virtuel BlackHole."
+  AUDIO_DRIVERS=0
+fi
+
+say "1/5 Pilotes audio et réveil réseau"
+if [[ "$ROLE" == "client" && $AUDIO_DRIVERS == 1 ]]; then
+  echo "macOS peut demander ton mot de passe pour installer BlackHole."
   brew list --cask blackhole-2ch >/dev/null 2>&1 || brew install --cask blackhole-2ch
   brew list --cask blackhole-16ch >/dev/null 2>&1 || brew install --cask blackhole-16ch
   brew list switchaudio-osx >/dev/null 2>&1 || brew install switchaudio-osx
 else
-  echo "== 1/5 Audio ignoré (--no-audio)"
+  echo "Pas de pilote audio virtuel nécessaire."
 fi
-# Réveil par le réseau : le raccourci du PC peut réveiller le Mac endormi
-if [[ "$(pmset -g | awk '$1 == "womp" {print $2}')" != "1" ]]; then
+if [[ "$ROLE" == "client" && "$(pmset -g | awk '$1 == "womp" {print $2}')" != "1" ]]; then
   echo "Activation du réveil par le réseau (mot de passe administrateur)"
   sudo pmset -a womp 1 || echo "Impossible d'activer le réveil par le réseau (sudo pmset -a womp 1)"
 fi
 
-echo "== 2/5 Environnement Python"
-if ! command -v uv >/dev/null; then brew install uv; fi
+say "2/5 Environnement Python"
+if ! command -v uv >/dev/null; then
+  if command -v brew >/dev/null; then
+    brew install uv
+  else
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+fi
 uv venv --allow-existing --python 3.12 .venv
 uv pip install --python .venv/bin/python -r requirements-mac.txt
 
-echo "== 3/5 Configuration"
+say "3/5 Configuration"
 if [[ ! -f config.toml ]]; then
-  sed "s|^secret = \"change-me\"|secret = \"${SECRET}\"|" config.example.toml > config.toml
-  if [[ $AUDIO == 0 ]]; then
-    sed -i '' 's/^enabled = true/enabled = false/' config.toml
-  fi
-  echo "config.toml créé."
+  sed -e "s|^secret = \"change-me\"|secret = \"${SECRET}\"|" \
+      -e "s|^role = \"server\"|role = \"${ROLE}\"|" config.example.toml > config.toml
+  chmod 600 config.toml
+  if [[ $AUDIO == 0 ]]; then sed -i '' 's/^enabled = true/enabled = false/' config.toml; fi
+  echo "config.toml créé (rôle : $ROLE)."
 else
-  echo "config.toml existe déjà, conservé."
+  .venv/bin/python -c "import sys; from setupdouble import config; config.save({None: {'role': sys.argv[1]}})" "$ROLE"
+  echo "config.toml conservé (rôle : $ROLE)."
 fi
 
 PY_REAL="$(.venv/bin/python -c 'import os,sys; print(os.path.realpath(sys.executable))')"
@@ -77,7 +94,7 @@ PLIST="$HOME/Library/LaunchAgents/com.setupdouble.agent.plist"
 LOGDIR="$HOME/Library/Logs/SetupDouble"
 mkdir -p "$LOGDIR" "$HOME/Library/LaunchAgents"
 
-echo "== 4/5 Démarrage automatique"
+say "4/5 Démarrage automatique"
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 if [[ $AUTOSTART == 1 ]]; then
   cat > "$PLIST" <<EOF
@@ -90,7 +107,7 @@ if [[ $AUTOSTART == 1 ]]; then
   <array>
     <string>${PY_REAL}</string>
     <string>-m</string>
-    <string>setupdouble.client_mac</string>
+    <string>setupdouble.${ROLE}</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -107,33 +124,34 @@ if [[ $AUTOSTART == 1 ]]; then
 </plist>
 EOF
   launchctl bootstrap "gui/$(id -u)" "$PLIST"
-  echo "Agent lancé et démarré à chaque ouverture de session."
+  echo "SetupDouble lancé, et relancé à chaque ouverture de session."
 else
-  echo "Lancement manuel :  .venv/bin/python -m setupdouble.client_mac"
+  echo "Lancement manuel :  .venv/bin/python -m setupdouble ${ROLE}"
 fi
 
-echo "== 5/5 Application SetupDouble (fenêtre de statut)"
+say "5/5 Application SetupDouble (fenêtre de statut)"
 .venv/bin/python -m setupdouble.mac_bundle --dest "$HOME/Applications"
 
+echo
+echo "====================================================================="
+if [[ $GENERATED == 1 ]]; then
+  echo "Clé à recopier sur l'autre machine (ou dans ses Réglages → Connexion) :"
+  echo
+  echo "      $SECRET"
+  echo
+fi
 cat <<EOF
-
-=====================================================================
-Il reste UNE étape à faire toi-même (macOS ne permet pas de l'automatiser) :
-
+Une seule étape manuelle (macOS l'impose) : autoriser Python.
+macOS affiche une demande au démarrage de SetupDouble ; sinon :
   Réglages Système → Confidentialité et sécurité → Accessibilité
-  → bouton « + » → Cmd+Maj+G → colle ce chemin, puis active l'interrupteur :
+  (« Contrôle de l'appareil et accès aux données » sur macOS récent)
+  → active « python3.12 ».
 
-      ${PY_REAL}
-
-Puis redémarre l'agent :
-      launchctl kickstart -k gui/$(id -u)/com.setupdouble.agent
-
-Conseil clavier : ajoute la disposition « Français – PC » dans
-Réglages Système → Clavier → Méthodes de saisie, pour que AltGr, @, #, {…}
-tombent exactement comme sur Windows.
-
-Fenêtre de statut : ouvre « SetupDouble » (Spotlight, Launchpad ou ~/Applications).
-
-Journal : ${LOGDIR}/client.log
-=====================================================================
+Fenêtre de statut : app « SetupDouble » (Spotlight ou ~/Applications).
+Journal : ${LOGDIR}/${ROLE}.log
 EOF
+if [[ "$ROLE" == "client" && $AUDIO_DRIVERS == 1 ]]; then
+  echo
+  echo "Première installation de BlackHole ? Redémarre le Mac pour que macOS le voie."
+fi
+echo "====================================================================="

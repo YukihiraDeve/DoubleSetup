@@ -6,7 +6,7 @@ import time
 import pytest
 
 from setupdouble import protocol as P
-from setupdouble.client_mac import Client, RecordingInjector
+from setupdouble.client import Client, RecordingInjector
 from setupdouble.mac_system import SleepGuard, parse_ifconfig
 from setupdouble.server_core import Server
 
@@ -95,7 +95,7 @@ def test_without_known_address_the_switch_is_refused(waking_server):
     notes = []
     server.notify = notes.append
     server.on_hotkey("toggle")
-    assert not server.waking and not sent and notes == ["Le Mac n'est pas connecté."]
+    assert not server.waking and not sent and notes == ["La machine pilotée n'est pas connectée."]
     ok, message = server.action("mac")
     assert not ok
 

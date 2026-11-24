@@ -8,7 +8,7 @@ import pytest
 
 from setupdouble import config as config_mod
 from setupdouble import protocol as P
-from setupdouble.client_mac import Client, RecordingInjector
+from setupdouble.client import Client, RecordingInjector
 from setupdouble.server_core import Server
 
 SECRET = "secret-de-test-123"
@@ -126,7 +126,7 @@ def test_refuses_switch_without_mac():
 
 
 def test_wrong_secret_is_rejected():
-    from setupdouble.client_mac import AuthError
+    from setupdouble.client import AuthError
 
     server = Server(make_cfg())
     server.input = FakeInput(server)

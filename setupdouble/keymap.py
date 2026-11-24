@@ -166,3 +166,52 @@ def flags_for(pressed_modifiers: set[int], caps_on: bool) -> int:
     if caps_on:
         flags |= FLAG_CAPS
     return flags
+
+
+# --- Linux (codes KEY_* de linux/input-event-codes.h) ------------------------------
+
+SCANCODE_TO_LINUX: dict[int, int] = {sc: sc for sc in range(0x01, 0x59) if sc not in (0x54, 0x55)}
+SCANCODE_TO_LINUX.update({0x64 + i: 183 + i for i in range(7)})  # F13..F19
+SCANCODE_TO_LINUX.update({
+    0xE01C: 96, 0xE01D: 97, 0xE035: 98, 0xE037: 99, 0xE038: 100,
+    0xE047: 102, 0xE048: 103, 0xE049: 104, 0xE04B: 105, 0xE04D: 106,
+    0xE04F: 107, 0xE050: 108, 0xE051: 109, 0xE052: 110, 0xE053: 111,
+    0xE020: 113, 0xE02E: 114, 0xE030: 115, 0xE046: 119,
+    0xE05B: 125, 0xE05C: 126, 0xE05D: 127,
+    0xE019: 163, 0xE022: 164, 0xE010: 165, 0xE024: 166,
+})
+LINUX_TO_SCANCODE: dict[int, int] = {v: k for k, v in SCANCODE_TO_LINUX.items()}
+
+
+# --- macOS comme machine source (keycodes Mac -> scancodes PC) ---------------------
+
+def _mac_inverse() -> dict[int, int]:
+    inv: dict[int, int] = {}
+    for sc, kc in SCANCODE_TO_MAC.items():
+        if kc >= MEDIA_BASE or sc in (0x46, 0xE046, 0xE037):  # alias de F13..F15
+            continue
+        inv.setdefault(kc, sc)
+    return inv
+
+
+MAC_TO_SCANCODE_BASE = _mac_inverse()
+
+
+class MacToScancode:
+    """Traduit un keycode Mac en scancode PC, modificateurs selon la disposition.
+
+    "pc"  : Cmd -> Ctrl, Ctrl -> Windows (miroir de la disposition « pc » côté Mac pilote) ;
+    "mac" : Cmd -> Windows, Ctrl -> Ctrl.
+    """
+
+    def __init__(self, modifier_layout: str = "pc"):
+        if modifier_layout not in MODIFIER_LAYOUTS:
+            raise ValueError(f"modifier_layout inconnu : {modifier_layout!r} (pc ou mac)")
+        self.table = dict(MAC_TO_SCANCODE_BASE)
+        for sc, kc in MODIFIER_LAYOUTS[modifier_layout].items():
+            self.table[kc] = sc
+        self.table[MAC_SHIFT], self.table[MAC_RSHIFT] = 0x2A, 0x36
+        self.table[MAC_CAPS] = 0x3A
+
+    def to_scancode(self, keycode: int) -> int | None:
+        return self.table.get(keycode)

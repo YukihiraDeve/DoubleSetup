@@ -1,48 +1,53 @@
-# SetupDouble – configuration (le même fichier sert au PC et au Mac).
-# Copie ce fichier en config.toml sur les deux machines.
+# SetupDouble – configuration. Le même modèle sert aux deux machines.
+# Tout se règle aussi depuis la fenêtre SetupDouble → ⚙ Réglages.
 
-# Secret partagé : IDENTIQUE sur le PC et sur le Mac (12 caractères minimum).
-# Les scripts d'installation en génèrent un automatiquement.
+# Clé partagée : IDENTIQUE sur les deux machines (12 caractères minimum).
+# L'installation en génère une automatiquement.
 secret = "change-me"
+
+# Rôle de cette machine, choisi à l'installation :
+#   "server" = clavier, souris et carte son sont branchés ici
+#   "client" = machine pilotée à distance
+role = "server"
 
 log_level = "INFO"   # DEBUG pour tout voir
 
-[server]   # ----- PC Windows (clavier, souris et Scarlett branchés dessus)
+[server]   # ----- la machine où sont branchés clavier, souris et carte son
 bind = "0.0.0.0"
 control_port = 47801          # TCP
-audio_port = 47802            # UDP (son du Mac reçu par le PC)
-beacon = true                 # annonce le PC sur le réseau (le Mac le trouve tout seul)
+audio_port = 47802            # UDP (son de la machine pilotée)
+beacon = true                 # annonce le serveur sur le réseau (découverte automatique)
 
-# Raccourcis : ctrl, alt, shift, win + une touche (lettre, chiffre, f1..f24,
-# space, left/right/up/down, home, end, pageup, pagedown, insert, delete,
-# scrolllock, pause, numpad0..9). Les touches s'entendent selon leur nom sur
-# le clavier AZERTY (« a » = la touche A).
-hotkey_toggle = "ctrl+alt+space"   # bascule PC <-> Mac
-hotkey_mac = ""                     # facultatif : aller directement au Mac (ex. "ctrl+alt+right")
-hotkey_pc = ""                      # facultatif : revenir directement au PC (ex. "ctrl+alt+left")
+# Raccourcis : ctrl, alt, shift, win (= ⌘ sur Mac) + une touche
+# (lettre, chiffre, f1..f24, space, left/right/up/down, home, end, pageup,
+# pagedown, insert, delete, scrolllock, pause, numpad0..9).
+hotkey_toggle = "ctrl+alt+space"   # bascule d'une machine à l'autre
+hotkey_remote = ""                  # facultatif : aller directement sur la machine pilotée
+hotkey_local = ""                   # facultatif : revenir directement ici
 
 clipboard = true              # partage du texte copié au moment de la bascule
-name = ""                     # nom affiché (défaut : nom du PC)
+name = ""                     # nom affiché (défaut : nom de l'ordinateur)
 ui_port = 47810               # fenêtre de statut (locale uniquement), 0 = désactivée
-wake_on_lan = true            # si le Mac dort, le raccourci le réveille puis bascule
+wake_on_lan = true            # si la machine pilotée dort, le raccourci la réveille
+modifier_layout = "pc"        # serveur Mac : ⌘ envoyée comme Ctrl ("pc") ou Windows ("mac")
 
-[client]   # ----- Mac
-server = ""                   # IP du PC ; vide = découverte automatique
+[client]   # ----- la machine pilotée
+server = ""                   # IP du serveur ; vide = découverte automatique
 control_port = 47801
-audio_port = 47803            # UDP (micro reçu par le Mac)
+audio_port = 47803            # UDP (micro reçu)
 
-# "pc"  : Ctrl = Cmd (Ctrl+C / Ctrl+V comme sur Windows), Windows = Ctrl, Alt = Option
-# "mac" : Windows = Cmd, Alt = Option, Ctrl = Ctrl (disposition Apple)
+# Mac piloté : "pc"  = Ctrl → ⌘ (Ctrl+C copie comme sur Windows), Windows → Ctrl
+#              "mac" = Windows → ⌘, Ctrl → Ctrl (disposition Apple)
 modifier_layout = "pc"
-swap_iso_keys = false         # mets true si les touches ² et < sont inversées sur le Mac
+swap_iso_keys = false         # true si les touches ² et < sont inversées
 mouse_speed = 1.0             # multiplicateur de vitesse du curseur
 scroll_speed = 3.0            # lignes par cran de molette
 invert_scroll = false
 clipboard = true
 name = ""
 ui_port = 47811               # fenêtre de statut (locale uniquement), 0 = désactivée
-# Tant que le PC est connecté, le Mac ne s'endort pas (seul l'écran s'éteint),
-# donc le raccourci le rallume tout de suite :
+# Tant que le serveur est connecté, la machine ne s'endort pas (seul l'écran
+# s'éteint) : le raccourci la rallume tout de suite.
 #   "power" = seulement sur secteur, "always" = aussi sur batterie, "never" = jamais
 prevent_sleep = "power"
 
@@ -51,18 +56,24 @@ enabled = true
 sample_rate = 48000
 block_ms = 5                  # taille des paquets
 latency_ms = 30               # tampon : monte à 50-80 si ça craque en Wi-Fi
-mac_sound = true              # le son du Mac sort dans le casque de la Scarlett
-mic = true                    # le micro de la Scarlett est disponible sur le Mac
+sound = true                  # le son de la machine pilotée sort dans le casque du serveur
+mic = true                    # le micro du serveur est disponible sur la machine pilotée
+sound_mode = "mix"            # "mix" : les deux sons en même temps ; "follow" : seulement si pilotée
+mic_mode = "always"           # "always" : micro partagé en permanence ; "follow" : seulement si pilotée
 
-# Côté PC
-win_output_device = "Scarlett|Focusrite"   # partie du nom de la sortie ; « | » = plusieurs essais
-win_input_device = "Scarlett|Focusrite"    # partie du nom de l'entrée (ex. « Scarlett Solo USB »)
-win_hostapi = "WASAPI"
-mic_channel = 1                   # entrée de la Scarlett où est branché le micro (1 ou 2)
-mac_sound_gain = 1.0
+# Pistes du serveur (une partie du nom suffit ; "" = périphérique par défaut ;
+# « | » sépare plusieurs essais, ex. "Scarlett|Focusrite")
+server_output_device = ""     # casque
+server_input_device = ""      # micro
+# server_hostapi = "WASAPI"   # Windows (valeur par défaut) ; ailleurs : vide
+mic_channel = 1               # entrée de la carte son où est branché le micro (1 ou 2)
+sound_gain = 1.0
 mic_gain = 1.0
 
-# Côté Mac (pilotes virtuels BlackHole)
-mac_capture_device = "BlackHole 2ch"    # le Mac joue son son ici -> envoyé au PC
-mac_mic_device = "BlackHole 16ch"       # le micro du PC arrive ici -> choisi comme micro
-mac_auto_route = true                   # bascule automatiquement l'entrée/sortie du Mac
+# Pistes de la machine pilotée ("" = désactivé). Sans ligne ici, valeurs par défaut :
+#   macOS   : capture "BlackHole 2ch", micro "BlackHole 16ch" (installés automatiquement)
+#   Windows : micro "CABLE Input" (VB-CABLE) ; capture : désactivée (2e câble virtuel)
+#   Linux   : désactivés (choisis tes périphériques PipeWire/PulseAudio)
+# client_capture_device = "BlackHole 2ch"
+# client_mic_device = "BlackHole 16ch"
+client_auto_route = true      # macOS : bascule l'entrée/sortie par défaut sur BlackHole

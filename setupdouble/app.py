@@ -21,17 +21,17 @@ from pathlib import Path
 
 from . import config as config_mod
 
-DEFAULT_PORT = {"darwin": 47811, "win32": 47810}
 LAUNCH_AGENT = "com.setupdouble.agent"
 
 
 def ui_port(config_path: str | None) -> int:
-    section = "client" if sys.platform == "darwin" else "server"
+    """Port de la fenêtre de statut selon le rôle de cette machine (serveur ou pilotée)."""
     try:
         cfg = config_mod.load(config_path)
-        return int(cfg[section]["ui_port"])
-    except Exception:  # config absente ou invalide : port par défaut
-        return DEFAULT_PORT.get(sys.platform, 47811)
+    except Exception:  # config absente ou invalide : valeurs par défaut
+        cfg = config_mod.DEFAULTS
+    role = cfg.get("role", "client")
+    return int(cfg["server" if role == "server" else "client"]["ui_port"])
 
 
 def reachable(url: str, timeout: float = 0.6) -> bool:
@@ -56,6 +56,9 @@ def start_backend() -> None:
         elif sys.platform == "win32":
             subprocess.run(["schtasks", "/Run", "/TN", "SetupDouble"], capture_output=True,
                            timeout=5, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            subprocess.run(["systemctl", "--user", "start", "setupdouble"],
+                           capture_output=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         pass
 

@@ -1,222 +1,161 @@
-# SetupDouble
+<p align="center">
+  <img src="setupdouble/ui/favicon.svg" width="88" alt="">
+</p>
 
-Utilise le **clavier, la souris et la Scarlett 2i2 branchés sur le PC Windows**
-pour piloter le **MacBook**, par le réseau local, sans rien débrancher.
+<h1 align="center">SetupDouble</h1>
 
-- **Ctrl + Alt + Espace** bascule le contrôle PC ⇄ Mac. Tu peux aussi passer par le menu de l'icône près de l'horloge Windows.
-- Le **son du Mac** sort dans le casque branché sur la Scarlett, mélangé au son du PC.
-- Le **micro de la Scarlett** est disponible sur le Mac (Discord, Meet, Zoom…).
-- Le **presse-papiers texte** suit la bascule : tu copies sur une machine, tu colles sur l'autre.
-- En mode PC, **rien n'intercepte le clavier ni la souris** : aucune latence ajoutée en jeu.
-- Une **fenêtre de statut**, sur le Mac comme sur le PC, montre où sont le clavier et la souris et si tout fonctionne.
+<p align="center">
+  <b>Un clavier, une souris, un casque, deux ordinateurs.</b><br>
+  Passe d'une machine à l'autre avec un raccourci, par le réseau local, sans rien débrancher.
+</p>
 
-```
- PC Windows (serveur)                             MacBook (agent)
- ┌──────────────────────────┐   TCP 47801        ┌──────────────────────────┐
- │ clavier/souris ──hooks───┼──────────────────▶ │ injection Quartz (CGEvent)│
- │ (seulement en mode Mac)  │  touches, souris   │                          │
- │                          │                    │                          │
- │ Scarlett sortie ◀────────┼───── UDP 47802 ────┼── BlackHole 2ch (son Mac) │
- │ Scarlett entrée (micro) ─┼───── UDP 47803 ───▶│── BlackHole 16ch (micro)  │
- │ icône + raccourci        │                    │ LaunchAgent               │
- └──────────────────────────┘                    └──────────────────────────┘
-```
+<p align="center">
+  Windows · macOS · Linux — dans tous les sens
+</p>
+
+---
+
+## En bref
+
+- **Ctrl + Alt + Espace** envoie le clavier et la souris sur l'autre machine. Le même raccourci les ramène.
+- **Le son de la machine pilotée** arrive dans ton casque, mélangé au son local ou seulement quand tu la pilotes, au choix.
+- **Ton micro** est disponible sur la machine pilotée, tout le temps ou seulement quand tu la pilotes.
+- **Le texte copié** suit la bascule.
+- **Si la machine pilotée dort**, le raccourci la réveille.
+- **Une fenêtre de statut**, façon macOS, montre où sont le clavier et la souris, si tout fonctionne, et permet de tout régler : raccourci, pistes audio, IP, clé.
+- **En jeu**, rien n'intercepte le clavier tant que tu restes sur ta machine : aucune latence ajoutée.
+
+Les deux rôles :
+
+| Rôle | C'est la machine… |
+|---|---|
+| **Serveur** | où sont branchés le clavier, la souris et la carte son (ex. le PC gaming) |
+| **Piloté** | que tu contrôles à distance (ex. le MacBook) |
+
+Toutes les combinaisons marchent : Windows → macOS, Windows → Windows, macOS → macOS, Linux → macOS, macOS → Linux, etc.
 
 ## Installation
 
-### 1. Sur le PC Windows
+Il faut installer les deux machines, en commençant par le **serveur**. Son installation affiche une **clé**, à donner ensuite à la machine pilotée.
 
-1. Copie le dossier du projet sur le PC (clé USB, partage réseau ou dépôt git).
-2. Installe Python 3.12 (`winget install Python.Python.3.12`) ou `uv` (`winget install astral-sh.uv`).
-3. Ouvre **PowerShell en administrateur** dans le dossier, puis :
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts\install_windows.ps1
-   ```
-
-4. **Note le secret affiché** : il te servira sur le Mac.
-
-Le script installe les dépendances et crée `config.toml`. Il ouvre aussi les ports dans le pare-feu, pour le réseau *privé* uniquement. Enfin, il lance SetupDouble à chaque ouverture de session, avec les droits élevés pour que le raccourci marche même devant une appli lancée en admin.
-
-### 2. Sur le Mac
+Récupère d'abord le projet sur chaque machine :
 
 ```bash
-./scripts/install_mac.sh --secret LE_SECRET_DU_PC
+git clone https://github.com/YukihiraDeve/DoubleSetup.git
+cd DoubleSetup
 ```
 
-Le script installe BlackHole 2ch, BlackHole 16ch et SwitchAudioSource. macOS demande ton mot de passe à ce moment. Le script installe aussi l'environnement Python et un LaunchAgent qui démarre l'agent automatiquement.
+### Windows
 
-**Une étape reste manuelle** (macOS l'impose) : autoriser l'**Accessibilité**.
-Le script affiche le chemin exact de Python à ajouter dans
-*Réglages Système → Confidentialité et sécurité → Accessibilité → « + »*.
-Ensuite, redémarre l'agent :
+Clic droit sur **`install.ps1`** → *Exécuter avec PowerShell*. Le script demande le rôle et les droits administrateur, puis s'occupe de tout : Python, pare-feu, démarrage automatique, raccourci dans le menu Démarrer.
+
+### macOS et Linux
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.setupdouble.agent
+./install.sh
 ```
 
-**Conseillé** : ajoute la disposition **« Français – PC »** dans
-*Réglages Système → Clavier → Méthodes de saisie*. Les touches sont envoyées
-selon leur position physique, donc avec cette disposition AltGr, @, #, { } et
-le reste tombent exactement comme sur Windows.
+Le script pose deux questions : le rôle, puis la clé si la machine est pilotée.
+
+Sur un Mac piloté, il installe aussi les pilotes audio BlackHole et active le réveil par le réseau.
+
+Sur Linux, il donne l'accès au clavier et à la souris. Il faut se reconnecter une fois après l'installation.
+
+### La seule étape manuelle (macOS)
+
+macOS impose d'autoriser Python à contrôler le clavier et la souris. SetupDouble affiche la demande au premier lancement. Si elle n'apparaît pas :
+
+*Réglages Système → Confidentialité et sécurité → Accessibilité* (« Contrôle de l'appareil et accès aux données » sur les versions récentes) → active **python3.12**.
+
+> **Mac piloté avec un clavier PC AZERTY** : ajoute la disposition **« Français – PC »** dans *Réglages Système → Clavier → Méthodes de saisie*. AltGr, @, # et { } tombent alors comme sur Windows.
 
 ## Utilisation
 
-| Action | Comment |
+| Je veux… | Comment |
 |---|---|
-| Passer au Mac / revenir au PC | **Ctrl + Alt + Espace**, ou clic gauche sur l'icône |
-| Choisir explicitement | clic droit sur l'icône → *Contrôler le Mac* / *Contrôler le PC* |
-| Couper le son du Mac dans le casque | menu → *Son du Mac dans le casque* |
-| Couper le micro vers le Mac | menu → *Micro vers le Mac* |
-| Volume du casque | touches volume du clavier ou molette de la Scarlett (toujours gérés par Windows) |
-| Mettre à jour SetupDouble | clic droit sur l'icône → *Mettre à jour* (récupère la dernière version sur GitHub, puis redémarre tout seul) |
+| Basculer le clavier et la souris | **Ctrl + Alt + Espace**, ou le sélecteur de la fenêtre SetupDouble |
+| Voir si tout marche | ouvrir **SetupDouble** (menu Démarrer, Spotlight/Launchpad, ou `python -m setupdouble app`) |
+| Couper le son ou le micro partagé | les interrupteurs de la carte *Audio* |
+| Choisir le casque, le micro, les pistes | bouton **Pistes audio** |
+| Changer le raccourci, l'IP, la clé… | **⚙ Réglages** |
+| Mettre à jour | Windows : clic droit sur l'icône → **Mettre à jour**. Ailleurs : `python -m setupdouble update` |
 
-L'icône affiche **PC** (gris) ou **MAC** (bleu). Une pastille verte indique que le Mac est connecté, une rouge qu'il ne l'est pas.
+La pastille en haut de la fenêtre passe au **vert** quand tout est prêt. Sinon, la liste *Vérifications* dit quoi corriger, sur chaque machine.
 
-**Sécurité** : si le Mac se déconnecte (veille, Wi-Fi coupé…) pendant que tu le
-contrôles, le clavier et la souris reviennent **automatiquement** au PC.
+**Sécurité** : si la machine pilotée se déconnecte (veille, Wi-Fi coupé…) pendant que tu la contrôles, le clavier et la souris reviennent **tout seuls** sur le serveur.
 
-Raccourcis clavier côté Mac, avec `modifier_layout = "pc"` (défaut) :
+### Réglages
 
-| Touche du clavier PC | Sur le Mac |
-|---|---|
-| Ctrl | ⌘ Cmd (Ctrl+C, Ctrl+V, Ctrl+Tab… comme sur Windows) |
-| Windows | ⌃ Ctrl |
-| Alt | ⌥ Option |
-| AltGr | ⌥ Option droite |
+Tout se règle dans **⚙ Réglages** ; l'enregistrement redémarre SetupDouble.
 
-Avec `modifier_layout = "mac"`, tu retrouves la disposition Apple : Windows = Cmd, Ctrl = Ctrl.
+| Onglet | Sur le serveur | Sur la machine pilotée |
+|---|---|---|
+| **Général** | nom, raccourcis (avec bouton « Enregistrer » : appuie sur la combinaison voulue), presse-papiers, réveil réseau | nom, touches Ctrl/Windows/⌘, vitesse du curseur et du défilement, veille |
+| **Audio** | sortie casque, entrée micro, son « les deux en même temps » ou « suivre le contrôle », pareil pour le micro, volumes | capture du son, micro virtuel |
+| **Connexion** | clé | IP du serveur (vide = automatique), clé |
 
-## Mise à jour
+Les mêmes réglages sont dans `config.toml`, commenté.
 
-Sur le PC : clic droit sur l'icône → **Mettre à jour**. SetupDouble :
-1. récupère la dernière version depuis GitHub ;
-2. réinstalle les dépendances si elles ont changé ;
-3. redémarre tout seul.
+### Modes audio
 
-Ton `config.toml` n'est jamais modifié.
+- **Les deux en même temps** (défaut) : le son de la machine pilotée se mélange à celui du serveur dans le casque, en permanence.
+- **Suivre le contrôle** : tu n'entends la machine pilotée que lorsque tu la pilotes. Sur un Mac, son son repasse sur ses haut-parleurs le reste du temps.
+- Pour le **micro**, c'est le même choix : partagé en permanence (pratique pour un appel sur le Mac pendant que tu joues), ou seulement quand tu pilotes.
 
-Le bouton n'existe qu'à partir de cette version. La toute première fois, mets à jour à la main dans le dossier du projet, puis relance SetupDouble (clic droit → *Quitter*, puis menu Démarrer → *SetupDouble*) :
+### Pistes audio de la machine pilotée
 
-```powershell
-git pull
-```
+| Système | Capturer son son | Recevoir le micro |
+|---|---|---|
+| **macOS** | BlackHole 2ch (installé, routage automatique) | BlackHole 16ch (installé) |
+| **Windows** | un câble virtuel ([VB-CABLE](https://vb-audio.com/Cable/) A+B) | « CABLE Input », puis « CABLE Output » comme micro dans tes applis |
+| **Linux** | une source « Monitor » PipeWire/PulseAudio | un *null sink* PipeWire |
 
-Sur le Mac, depuis le dossier du projet :
+### Machine pilotée endormie
 
-```bash
-.venv/bin/python -m setupdouble.updater && launchctl kickstart -k gui/$(id -u)/com.setupdouble.agent
-```
-
-## Mac en veille
-
-Le raccourci marche aussi quand le Mac dort :
-
-- **Écran éteint** : tant que le PC est connecté et que le Mac est sur secteur, SetupDouble empêche le Mac de s'endormir complètement. Seul l'écran s'éteint, et le raccourci le rallume tout de suite. Avec `prevent_sleep = "always"`, ça vaut aussi sur batterie ; avec `"never"`, la fonction est désactivée.
-- **Mac vraiment endormi** (pomme → Suspendre, ou capot fermé) : le PC envoie un signal de réveil (Wake-on-LAN), attend que le Mac se reconnecte, puis bascule tout seul. La fenêtre affiche « Réveil du Mac… » pendant l'attente.
-
-Pour le réveil, il faut :
-- le réglage *Réveiller pour l'accès au réseau* (`sudo pmset -a womp 1`), que le script d'installation active ;
-- que le Mac se soit connecté au moins une fois au PC, pour que le PC connaisse son adresse.
-
-Le réveil fonctionne surtout en Ethernet et sur secteur. En Wi-Fi ou depuis un sommeil profond, il dépend du matériel. C'est pour ça que garder le Mac éveillé sur secteur reste la solution la plus fiable.
-
-## Fenêtre de statut
-
-Elle montre en un coup d'œil :
-- quelle machine utilise le clavier et la souris, avec un bouton pour basculer ;
-- si le PC et le Mac sont connectés, et la latence entre eux ;
-- si le son du Mac arrive bien dans le casque et si le micro arrive sur le Mac, avec un interrupteur pour chacun ;
-- la liste des vérifications des deux machines (Accessibilité, BlackHole, Scarlett, raccourci). La pastille en haut passe au orange ou au rouge dès qu'un point bloque.
-
-Pour l'ouvrir :
-- **Mac** : l'app **SetupDouble** dans `~/Applications`, aussi accessible par Spotlight ou le Launchpad ;
-- **PC** : menu Démarrer → **SetupDouble**, ou clic droit sur l'icône → *Ouvrir SetupDouble…*
-
-La page est servie en local uniquement, sur `127.0.0.1:47811` côté Mac et `127.0.0.1:47810` côté PC. Elle est protégée par un jeton, donc un site web ne peut pas piloter la bascule.
-
-Pour voir l'interface sans rien installer, lance la démo : elle simule un PC et un Mac connectés.
-
-```bash
-.venv/bin/python -m setupdouble.demo            # puis http://127.0.0.1:47821/ (vue Mac) ou :47820 (vue PC)
-.venv/bin/python -m setupdouble.demo --window   # dans la fenêtre native macOS
-```
-
-## Configuration
-
-Tout se règle dans `config.toml`, avec le même format sur les deux machines (voir
-`config.example.toml`, commenté). Les réglages utiles :
-
-- `hotkey_toggle`, `hotkey_mac`, `hotkey_pc` : les raccourcis, par exemple `"ctrl+alt+right"`.
-- `server` (côté Mac) : l'IP du PC, si la découverte automatique ne marche pas.
-- `mouse_speed`, `scroll_speed`, `invert_scroll` : le réglage de la souris sur le Mac.
-- `latency_ms` : la taille du tampon audio. Monte-le à 50-80 ms si le son craque en Wi-Fi.
-- `mic_channel` : l'entrée de la Scarlett où le micro est branché (1 ou 2).
-- `win_output_device` / `win_input_device` : une partie du nom de la Scarlett sous Windows.
-
-Pour lister les périphériques audio et vérifier ceux que la config va prendre :
-
-```bash
-.venv/bin/python -m setupdouble.devices          # Mac
-```
-
-```powershell
-.venv\Scripts\python.exe -m setupdouble.devices  # Windows
-```
+- **Écran éteint** : tant que le serveur est connecté et la machine sur secteur, seul l'écran s'éteint, et le raccourci le rallume.
+- **Vraiment endormie** : le serveur envoie un signal Wake-on-LAN, attend qu'elle se reconnecte, puis bascule. Le réveil fonctionne surtout en Ethernet. En Wi-Fi, il dépend du matériel.
 
 ## Dépannage
 
 | Problème | Piste |
 |---|---|
-| Le Mac ne bouge pas, mais le journal dit « Connecté » | Accessibilité pas autorisée pour le bon Python (voir le chemin dans le journal) |
-| « Le Mac n'est pas connecté » | Les deux machines sont-elles sur le même réseau ? Réseau Windows en *Privé* ? Sinon, mets l'IP du PC dans `client.server` |
-| macOS demande l'accès au réseau local | Accepte (Réglages → Confidentialité → Réseau local) |
-| Le son craque | Augmente `latency_ms` ; branche le Mac en Ethernet si possible |
-| Pas de son du Mac dans le casque | Sortie du Mac = « BlackHole 2ch » ? Sous Windows, règle la Scarlett en 48 kHz |
-| Les touches ² et < sont inversées | `swap_iso_keys = true` |
-| Tester sans rien injecter | `.venv/bin/python -m setupdouble.client_mac --dry-run` |
+| Pastille « Non connecté » | Même réseau ? Réseau Windows en *Privé* ? Sinon, mets l'IP du serveur dans *Réglages → Connexion* de la machine pilotée |
+| « Clé refusée » | La clé doit être identique sur les deux machines (*Réglages → Connexion*) |
+| La machine pilotée ne bouge pas | macOS : Accessibilité. Linux : reconnecte-toi après l'installation (groupe `input`) |
+| Le raccourci ne fait rien | Une autre appli l'utilise peut-être : la fenêtre l'indique en orange. Choisis-en un autre dans *Réglages* |
+| Pas de son dans le casque | *Pistes audio* : bonne sortie ? Sur Mac piloté, BlackHole n'apparaît qu'après un redémarrage |
+| Le son craque | *Réglages → Audio → Tampon audio* : monte à 50-80 ms, ou passe en Ethernet |
+| ² et < inversés | *Réglages → Général → Inverser les touches ² et <* |
 
-Journaux :
-- Windows : `%LOCALAPPDATA%\SetupDouble\server.log`, aussi accessible par *Ouvrir le journal* dans le menu.
-- Mac : `~/Library/Logs/SetupDouble/client.log`
+Journaux, accessibles aussi par « Ouvrir le journal » :
+- Windows : `%LOCALAPPDATA%\SetupDouble\`
+- macOS : `~/Library/Logs/SetupDouble/`
+- Linux : `~/.local/state/setupdouble/`
 
 ## Limites connues
 
-- **Le trafic n'est pas chiffré.** L'accès est protégé par le secret partagé (HMAC) : sans lui, aucun appareil ne reçoit tes frappes. Mais quelqu'un qui écoute ton réseau local pourrait les lire. À réserver à un réseau domestique de confiance.
-- L'audio passe par le réseau en PCM brut, avec environ 30 à 40 ms de latence : parfait pour la musique, la vidéo et les appels, pas pour enregistrer en t'écoutant en direct.
-- L'état de Verr. Maj du Mac peut se désynchroniser si tu l'actives aussi depuis le clavier du Mac.
-- Les touches volume restent volontairement sur Windows, puisque c'est lui qui alimente le casque.
-- Si une appli Windows lancée en admin est au premier plan, il faut que SetupDouble tourne lui aussi en admin. Le script d'installation s'en occupe.
+- **Le trafic n'est pas chiffré.** Seuls les appareils qui connaissent la clé peuvent se connecter, mais quelqu'un qui écoute le réseau pourrait lire les frappes. À réserver à un réseau domestique de confiance.
+- **L'audio a 30 à 40 ms de retard** : parfait pour la musique, la vidéo et les appels, pas pour t'écouter en direct pendant un enregistrement.
+- **Testé en vrai** : Windows → macOS. Les autres combinaisons (pilotes Windows et Linux, capture macOS et Linux) sont couvertes par les tests automatiques, mais pas encore éprouvées sur du vrai matériel.
+- **Serveur Linux** : pas d'icône dans la barre système. La fenêtre de statut et le raccourci suffisent.
+- **Serveur macOS ou Linux** : les lettres des raccourcis suivent leur position QWERTY. Préfère `space`, les flèches ou `f1..f24`.
 
 ## Développement
 
 ```bash
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -r requirements-mac.txt pytest
+uv pip install --python .venv/bin/python -r requirements-mac.txt pytest pyflakes
 .venv/bin/python -m pytest -q
+.venv/bin/python -m setupdouble demo           # interface avec un serveur et un client simulés
 ```
-
-Les tests couvrent :
-- le protocole ;
-- la table des touches ;
-- le tampon audio, y compris la compensation de dérive d'horloge ;
-- un aller-retour audio UDP ;
-- une intégration serveur ⇄ agent complète sur 127.0.0.1 ;
-- le tableau de bord (état, bascule depuis le PC ou le Mac, refus sans jeton) ;
-- la logique des hooks Windows, avec une `user32` simulée.
 
 | Fichier | Rôle |
 |---|---|
-| `setupdouble/protocol.py` | trames TCP, paquets audio UDP, authentification, découverte |
-| `setupdouble/server_core.py` | serveur côté PC (réseau, session, audio), indépendant de Windows |
-| `setupdouble/win_input.py` | raccourci global + hooks bas niveau (ctypes) |
-| `setupdouble/server_win.py` | point d'entrée Windows, icône dans la barre des tâches |
-| `setupdouble/client_mac.py` | agent Mac |
-| `setupdouble/mac_inject.py` | injection clavier/souris via Quartz |
-| `setupdouble/mac_system.py` | presse-papiers et routage audio du Mac |
-| `setupdouble/audio.py` | émission/réception audio, tampon anti-gigue |
-| `setupdouble/keymap.py` | scancodes PC → keycodes Mac |
-| `setupdouble/dashboard.py` | serveur local de la fenêtre de statut (état JSON + actions) |
-| `setupdouble/ui/index.html` | l'interface de la fenêtre de statut |
-| `setupdouble/app.py` | ouvre la fenêtre (WebKit natif sur Mac, Edge en mode appli sous Windows) |
-| `setupdouble/mac_window.py`, `mac_bundle.py` | fenêtre macOS et création de `SetupDouble.app` |
+| `setupdouble/server.py`, `server_core.py` | serveur (capture, session, audio, réveil) |
+| `setupdouble/client.py` | machine pilotée |
+| `setupdouble/platforms.py` | tout ce qui dépend du système |
+| `win_input.py` / `mac_capture.py` / `linux_input.py` | capture clavier et souris |
+| `win_inject.py` / `mac_inject.py` / `linux_input.py` | injection clavier et souris |
+| `setupdouble/dashboard.py`, `settings.py`, `ui/index.html` | fenêtre de statut et réglages |
+| `setupdouble/protocol.py`, `audio.py`, `keymap.py` | réseau, audio, tables de touches |
+| `setupdouble/updater.py` | mise à jour depuis GitHub |

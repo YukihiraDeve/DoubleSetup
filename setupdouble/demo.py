@@ -18,7 +18,7 @@ import time
 
 from . import config as config_mod
 from . import dashboard
-from .client_mac import Client, RecordingInjector
+from .client import Client, RecordingInjector
 from .server_core import Server
 
 SECRET = "demo-secret-local-123"
@@ -75,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg["client"]["name"] = "MacBook Pro"
 
     server = Server(cfg)
+    server.os = "windows"
+    server.save_settings = lambda updates: (True, "Démo : réglages non enregistrés.")
     server._start_audio = lambda: _fake_server_audio(server)
     server.input = _FakeInput(server)
     server.start()
@@ -82,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
     client._start_audio = lambda host, port: _fake_client_audio(client, host, port)
     client._device_presence = lambda: {"capture": True, "mic": True}
     client.accessibility = lambda: True
+    client.os = "mac"
+    client.save_settings = lambda updates: (True, "Démo : réglages non enregistrés.")
     d_pc = dashboard.Dashboard(server, 47820).start()
     d_mac = dashboard.Dashboard(client, 47821).start()
 

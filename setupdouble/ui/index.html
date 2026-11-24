@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SetupDouble</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   :root {
     --bg-1: #1c1538;
@@ -215,7 +216,79 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
+
+  /* --- ajouts v0.2 : boutons d'en-tête, réglages */
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 10px;
+              border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--text-2);
+              transition: background .2s, color .2s; }
+  .icon-btn:hover { background: var(--card-hover); color: var(--text); }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .icon-btn:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 9px;
+         border: 1px solid var(--line); background: rgba(255,255,255,.08); cursor: pointer; font-size: 12.5px;
+         font-weight: 500; color: var(--text); transition: background .2s; }
+  .btn:hover { background: rgba(255,255,255,.14); }
+  .btn.primary { background: linear-gradient(135deg, rgba(160,140,255,.95), rgba(90,150,255,.95)); border-color: transparent;
+                 box-shadow: 0 6px 18px -8px rgba(120,110,255,.9); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn svg { width: 14px; height: 14px; }
+  .card h3 .btn { text-transform: none; letter-spacing: 0; height: 26px; font-size: 12px; }
+
+  .modal { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px;
+           background: rgba(8, 10, 26, .55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+           opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .modal.open { opacity: 1; pointer-events: auto; }
+  .sheet { width: min(620px, 100%); max-height: min(640px, calc(100vh - 40px)); display: flex; flex-direction: column;
+           border-radius: 20px; background: linear-gradient(160deg, rgba(42, 32, 86, .97), rgba(20, 30, 62, .97));
+           border: 1px solid var(--line); box-shadow: 0 30px 80px -20px rgba(0,0,0,.7);
+           transform: translateY(12px) scale(.98); transition: transform .3s cubic-bezier(.3, 1.3, .5, 1); }
+  .modal.open .sheet { transform: none; }
+  .sheet header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
+  .sheet h2 { margin: 0; font-size: 16px; }
+  .tabs { display: flex; gap: 4px; margin: 14px 20px 0; padding: 3px; border-radius: 11px; background: rgba(0,0,0,.25);
+          border: 1px solid var(--line); }
+  .tabs button { flex: 1; height: 30px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+                 color: var(--text-2); font-weight: 600; font-size: 12.5px; }
+  .tabs button[aria-selected="true"] { background: rgba(255,255,255,.12); color: var(--text); }
+  .sheet .body { padding: 8px 20px 4px; overflow-y: auto; flex: 1; }
+  .sheet footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 20px 18px;
+                  border-top: 1px solid var(--line); }
+  .sheet footer .note { color: var(--text-3); font-size: 11.5px; }
+  .field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 4px 16px; align-items: center;
+           padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .field:last-child { border-bottom: 0; }
+  .field > label, .field > .label { font-weight: 500; }
+  .field .help { grid-column: 1 / -1; color: var(--text-3); font-size: 11.5px; }
+  .field.stack { grid-template-columns: 1fr; }
+  .field .control { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; }
+  .field input[type=text], .field input[type=password], .field select {
+    width: 100%; min-width: 0; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--line);
+    background: rgba(0,0,0,.25); color: var(--text); font: inherit; font-size: 12.5px; }
+  .field select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor: pointer;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(235,238,255,.6) 50%), linear-gradient(135deg, rgba(235,238,255,.6) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px; background-size: 5px 5px; background-repeat: no-repeat; }
+  .field select option { background: #1d1a3c; }
+  .field input:focus, .field select:focus { outline: 2px solid rgba(142,168,255,.6); outline-offset: 0; }
+  .field input[type=range] { width: 100%; accent-color: #8ea8ff; }
+  .field .value { min-width: 46px; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .field input.recording { outline: 2px solid var(--warn); }
+  .choices { display: grid; gap: 6px; }
+  .choice { display: flex; gap: 10px; align-items: flex-start; padding: 9px 11px; border-radius: 10px; cursor: pointer;
+            border: 1px solid var(--line); background: rgba(0,0,0,.18); }
+  .choice:has(input:checked) { border-color: rgba(142,168,255,.65); background: rgba(142,168,255,.12); }
+  .choice input { margin: 2px 0 0; accent-color: #8ea8ff; }
+  .choice b { display: block; font-weight: 600; font-size: 12.5px; }
+  .choice span { color: var(--text-3); font-size: 11.5px; }
+  .section-title { margin: 14px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+                   color: var(--text-3); }
+  .secret-box { grid-column: 1 / -1; display: flex; gap: 8px; }
+  .secret-box input { flex: 1; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace !important; }
+  .field input, .field select { user-select: text; -webkit-user-select: text; }
+  .logo-img { width: 20px; height: 20px; border-radius: 6px; box-shadow: 0 2px 10px rgba(140, 110, 255, .5); }
 </style>
+
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -231,6 +304,11 @@
     <rect x="12" y="15" width="56" height="38" rx="4"/>
     <path d="M35 15.5h10"/>
     <path d="M4 59h72l-3.5 5a3 3 0 0 1-2.5 1.3H10a3 3 0 0 1-2.5-1.3z"/>
+  </symbol>
+  <symbol id="i-monitor" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="8" y="12" width="64" height="42" rx="4"/>
+    <path d="M32 54l-3 12h22l-3-12M24 66h32"/>
+    <path d="M30 40l8-8-8-8M42 40h10"/>
   </symbol>
   <symbol id="i-kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <rect x="2" y="6" width="20" height="12" rx="2.5"/>
@@ -249,19 +327,32 @@
     <rect x="9" y="3" width="6" height="11" rx="3"/>
     <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/>
   </symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+  </symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>
+  </symbol>
+  <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M6 6l12 12M18 6L6 18"/>
+  </symbol>
 </svg>
 
 <div class="app">
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true"></span>SetupDouble</div>
-    <div id="pill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span id="pill-text">Chargement…</span></div>
+    <div class="brand"><img class="logo-img" src="/favicon.svg" alt="" width="20" height="20">SetupDouble</div>
+    <div class="top-actions">
+      <div id="pill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span id="pill-text">Chargement…</span></div>
+      <button class="icon-btn" id="open-settings" title="Réglages" aria-label="Réglages"><svg><use href="#i-gear"/></svg></button>
+    </div>
   </header>
 
   <section class="stage" aria-label="Machines">
-    <div class="machine" id="m-pc">
+    <div class="machine" id="m-server">
       <span class="here" hidden>Cet ordinateur</span>
       <svg class="device" aria-hidden="true"><use href="#i-tower"/></svg>
-      <div class="name">PC Windows</div>
+      <div class="name">Serveur</div>
       <div class="sub"></div>
       <div class="peripherals" aria-hidden="true">
         <span class="chip"><svg><use href="#i-kbd"/></svg>Clavier</span>
@@ -274,10 +365,10 @@
       <div class="link-label" id="link-label"></div>
     </div>
 
-    <div class="machine" id="m-mac">
+    <div class="machine" id="m-client">
       <span class="here" hidden>Cet ordinateur</span>
       <svg class="device" aria-hidden="true"><use href="#i-laptop"/></svg>
-      <div class="name">Mac</div>
+      <div class="name">Machine pilotée</div>
       <div class="sub"></div>
       <div class="peripherals" aria-hidden="true">
         <span class="chip"><svg><use href="#i-kbd"/></svg>Clavier</span>
@@ -287,32 +378,32 @@
   </section>
 
   <section class="switch">
-    <div class="seg" id="seg" role="radiogroup" aria-label="Clavier et souris" data-active="pc">
+    <div class="seg" id="seg" role="radiogroup" aria-label="Clavier et souris" data-active="server">
       <div class="thumb"></div>
-      <button role="radio" data-target="pc" aria-checked="true"><svg><use href="#i-kbd"/></svg>Sur le PC</button>
-      <button role="radio" data-target="mac" aria-checked="false"><svg><use href="#i-kbd"/></svg>Sur le Mac</button>
+      <button role="radio" data-target="server" aria-checked="true"><svg><use href="#i-kbd"/></svg><span>Ici</span></button>
+      <button role="radio" data-target="client" aria-checked="false"><svg><use href="#i-kbd"/></svg><span>Là-bas</span></button>
     </div>
     <p class="hint" id="hint"></p>
   </section>
 
   <section class="grid">
     <div class="card">
-      <h3>Audio</h3>
+      <h3>Audio <button class="btn" id="open-audio" title="Choisir les entrées et sorties audio"><svg><use href="#i-sliders"/></svg>Pistes audio</button></h3>
       <div class="row">
         <div class="ico"><svg><use href="#i-headphones"/></svg></div>
         <div class="txt">
-          <div class="title">Son du Mac dans le casque</div>
+          <div class="title" id="sound-title">Son partagé</div>
           <div class="desc" id="sound-desc"></div>
         </div>
-        <button class="toggle" id="sound" role="switch" aria-checked="false" aria-label="Son du Mac dans le casque"></button>
+        <button class="toggle" id="sound" role="switch" aria-checked="false" aria-labelledby="sound-title"></button>
       </div>
       <div class="row">
         <div class="ico"><svg><use href="#i-mic"/></svg></div>
         <div class="txt">
-          <div class="title">Micro de la Scarlett sur le Mac</div>
+          <div class="title" id="mic-title">Micro partagé</div>
           <div class="desc" id="mic-desc"></div>
         </div>
-        <button class="toggle" id="mic" role="switch" aria-checked="false" aria-label="Micro de la Scarlett sur le Mac"></button>
+        <button class="toggle" id="mic" role="switch" aria-checked="false" aria-labelledby="mic-title"></button>
       </div>
     </div>
 
@@ -323,11 +414,33 @@
   </section>
 </div>
 
+<div class="modal" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="sheet">
+    <header>
+      <h2 id="settings-title">Réglages</h2>
+      <button class="icon-btn" id="close-settings" aria-label="Fermer"><svg><use href="#i-close"/></svg></button>
+    </header>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="general" aria-selected="true">Général</button>
+      <button role="tab" data-tab="audio" aria-selected="false">Audio</button>
+      <button role="tab" data-tab="connection" aria-selected="false">Connexion</button>
+    </div>
+    <div class="body" id="settings-body"></div>
+    <footer>
+      <span class="note">L'enregistrement redémarre SetupDouble sur cet ordinateur.</span>
+      <div style="display:flex; gap:8px">
+        <button class="btn" id="cancel-settings">Annuler</button>
+        <button class="btn primary" id="save-settings">Enregistrer</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
 <div class="overlay" role="alertdialog" aria-label="Agent injoignable">
   <div class="box">
     <div class="spinner"></div>
     <h2>SetupDouble ne répond pas</h2>
-    <p id="offline-text">L'agent est peut-être arrêté. Reconnexion automatique…</p>
+    <p id="offline-text">L'agent est peut-être arrêté ou en train de redémarrer. Reconnexion automatique…</p>
   </div>
 </div>
 <div class="toast" id="toast" role="alert"></div>
@@ -339,6 +452,8 @@ const $ = (id) => document.getElementById(id);
 let state = null;
 let failures = 0;
 let pendingUntil = 0;  // évite qu'un ancien état écrase un clic tout juste fait
+const OS_LABEL = { windows: "Windows", mac: "macOS", linux: "Linux" };
+const OS_ICON = { windows: "#i-tower", mac: "#i-laptop", linux: "#i-monitor" };
 
 if (!/SetupDouble/.test(navigator.userAgent)) document.body.classList.add("browser");
 
@@ -366,7 +481,7 @@ function toast(msg, info) {
   t.classList.toggle("info", !!info);
   t.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 3600);
 }
 
 async function act(action, value) {
@@ -395,62 +510,75 @@ function hotkeyHtml(hk) {
   return frag;
 }
 
+function machineName(s, key) {
+  const m = s.machines[key];
+  return m.name || (key === "server" ? "Serveur" : "Machine pilotée");
+}
+
+/** Libellé court d'une machine : son système, ou son nom si les deux ont le même. */
+function shortName(s, key) {
+  const a = s.machines.server.os, b = s.machines.client.os;
+  const os = s.machines[key].os;
+  if (os && a && b && a !== b) return OS_LABEL[os] || os;
+  const name = machineName(s, key);
+  return name.length > 16 ? name.slice(0, 15) + "…" : name;
+}
+
 function render(s) {
   const connected = s.link.state === "connected";
-  const peer = s.role === "pc" ? "mac" : "pc";
+  const peer = s.role === "server" ? "client" : "server";
 
-  // machines
-  for (const key of ["pc", "mac"]) {
+  for (const key of ["server", "client"]) {
     const m = s.machines[key];
     const el = $("m-" + key);
     el.classList.toggle("active", s.active === key);
     el.classList.toggle("offline", key === peer && !connected);
     el.querySelector(".here").hidden = !m.here;
-    setText(el.querySelector(".name"), m.name || (key === "pc" ? "PC Windows" : "Mac"));
-    let sub = "";
-    if (key === peer) sub = connected ? (m.ip || "") : "Hors ligne";
+    const use = el.querySelector("svg.device use");
+    const icon = OS_ICON[m.os] || (key === "server" ? "#i-tower" : "#i-laptop");
+    if (use.getAttribute("href") !== icon) use.setAttribute("href", icon);
+    setText(el.querySelector(".name"), machineName(s, key));
+    let sub;
+    if (key === peer) sub = connected ? [OS_LABEL[m.os], m.ip].filter(Boolean).join(" · ") : "Hors ligne";
     else sub = s.active === key ? "Utilise le clavier et la souris"
-                                : `Clavier et souris sur le ${s.active === "pc" ? "PC" : "Mac"}`;
+                                : `Clavier et souris sur ${shortName(s, s.active)}`;
     setText(el.querySelector(".sub"), sub);
   }
 
-  // lien réseau
   const link = $("link");
   link.classList.toggle("connected", connected);
   link.classList.toggle("broken", !connected && s.link.state !== "waking");
   link.classList.toggle("waking", s.link.state === "waking");
-  link.classList.toggle("flow", connected && s.active === "mac");
+  link.classList.toggle("flow", connected && s.active === "client");
   const label = $("link-label");
   label.replaceChildren();
   const b = document.createElement("b");
-  const titles = { connected: "Connecté", waiting: "En attente du Mac", waking: "Réveil du Mac…",
-                   searching: "Recherche du PC",
-                   connecting: "Connexion…", auth_failed: "Secret refusé", error: "PC injoignable" };
+  const titles = { connected: "Connecté", waiting: "En attente", waking: "Réveil…",
+                   searching: "Recherche du serveur", connecting: "Connexion…",
+                   auth_failed: "Clé refusée", error: "Serveur injoignable" };
   b.textContent = titles[s.link.state] || s.link.state;
   label.append(b, connected && s.link.rtt_ms != null ? `${Math.max(1, Math.round(s.link.rtt_ms))} ms` : "");
   label.title = s.link.detail || "";
 
-  // sélecteur
   const seg = $("seg");
   if (Date.now() > pendingUntil) seg.dataset.active = s.active;
   for (const btn of seg.querySelectorAll("button")) {
     btn.setAttribute("aria-checked", String(seg.dataset.active === btn.dataset.target));
-    btn.disabled = !connected && !s.can_wake && btn.dataset.target === "mac" && s.active !== "mac";
+    setText(btn.querySelector("span"), `Sur ${shortName(s, btn.dataset.target)}`);
+    btn.disabled = !connected && !s.can_wake && btn.dataset.target === "client" && s.active !== "client";
   }
   const hint = $("hint");
   hint.replaceChildren();
   if (s.link.state === "waking") {
-    hint.append("Réveil du Mac : la bascule se fera dès qu'il répond.");
+    hint.append("Réveil en cours : la bascule se fera dès que la machine répond.");
   } else if (!connected && s.can_wake) {
-    hint.append("Le Mac dort ? ", ...(s.hotkey ? [hotkeyHtml(s.hotkey), " ou "] : []),
-                "« Sur le Mac » le réveille.");
+    hint.append(`${machineName(s, "client")} dort ? `, ...(s.hotkey ? [hotkeyHtml(s.hotkey), " ou "] : []),
+                "le bouton ci-dessus la réveille.");
   } else if (!connected) {
-    hint.append(s.role === "pc" ? "Lance l'agent sur le Mac pour pouvoir basculer."
-                                 : (s.link.detail || "Recherche du PC…"));
+    hint.append(s.role === "server" ? "Lance SetupDouble sur la machine à piloter pour pouvoir basculer."
+                                    : (s.link.detail || "Recherche du serveur…"));
   } else if (s.hotkey) {
-    hint.append("Raccourci sur le clavier du PC : ", hotkeyHtml(s.hotkey));
-  } else {
-    hint.append("Clavier et souris branchés sur le PC");
+    hint.append(`Raccourci sur le clavier de ${machineName(s, "server")} : `, hotkeyHtml(s.hotkey));
   }
 
   renderAudio(s, connected);
@@ -460,40 +588,47 @@ function render(s) {
 
 function renderAudio(s, connected) {
   const a = s.audio;
+  const client = machineName(s, "client"), server = machineName(s, "server");
+  setText($("sound-title"), `Son de ${client}`);
+  setText($("mic-title"), `Micro vers ${client}`);
+  $("sound-title").title = `Le son de ${client} dans le casque de ${server}`;
+  $("mic-title").title = `Le micro de ${server} disponible sur ${client}`;
   const rows = [
-    ["sound", a.sound, a.sound_flow, "Le son du Mac arrive dans le casque", "Aucun son reçu : sortie du Mac sur BlackHole 2ch ?"],
-    ["mic", a.mic, a.mic_flow, "Le Mac reçoit le micro", "Aucun son reçu du micro"],
+    ["sound", a.sound, a.sound_flow, a.sound_mode === "follow", a.sound_live,
+     "Arrive dans le casque", "Aucun son reçu : vérifie la piste de capture"],
+    ["mic", a.mic, a.mic_flow, a.mic_mode === "follow", a.mic_live,
+     "Le micro est reçu", "Aucun son reçu du micro"],
   ];
-  for (const [id, on, flow, live, bad] of rows) {
+  for (const [id, on, flow, follow, live, liveText, bad] of rows) {
     const t = $(id);
     if (Date.now() > pendingUntil) t.setAttribute("aria-checked", String(on));
     t.disabled = !a.enabled;
     const d = $(id + "-desc");
     d.className = "desc";
     d.replaceChildren();
-    if (!a.enabled) d.append("Audio désactivé dans config.toml");
+    if (!a.enabled) d.append("Audio désactivé (Réglages → Audio)");
     else if (!on) d.append("Coupé");
     else if (!connected) d.append("En attente de connexion");
+    else if (follow && live === false) d.append("Actif quand tu la pilotes");
     else if (flow === true) {
       d.classList.add("live");
       const eq = document.createElement("span");
       eq.className = "eq";
       eq.innerHTML = "<i></i><i></i><i></i>";
-      d.append(eq, live);
+      d.append(eq, liveText);
     } else if (flow === false) { d.classList.add("bad"); d.append(bad); }
-    else d.append("Activé");
+    else d.append(follow ? "Actif quand tu la pilotes" : "Activé");
   }
 }
 
 function renderChecks(s, connected) {
   const ul = $("checks");
   const frag = document.createDocumentFragment();
-  const names = { pc: s.machines.pc.name || "PC Windows", mac: s.machines.mac.name || "Mac" };
-  const order = s.role === "pc" ? ["pc", "mac"] : ["mac", "pc"];
+  const order = s.role === "server" ? ["server", "client"] : ["client", "server"];
   for (const machine of order) {
     const g = document.createElement("li");
     g.className = "group";
-    g.textContent = names[machine] + (s.machines[machine].here ? " · cet ordinateur" : "");
+    g.textContent = machineName(s, machine) + (s.machines[machine].here ? " · cet ordinateur" : "");
     frag.append(g);
     const items = s.checks.filter((c) => c.machine === machine);
     if (!items.length) {
@@ -528,9 +663,9 @@ function renderPill(s, connected) {
   let cls = "ok", text = "Tout est opérationnel";
   const errors = s.checks.filter((c) => c.state === "error").length;
   const warns = s.checks.filter((c) => c.state === "warn").length;
-  if (s.link.state === "auth_failed") { cls = "error"; text = "Secret refusé"; }
-  else if (s.link.state === "waking") { cls = "warn"; text = "Réveil du Mac…"; }
-  else if (!connected) { cls = "warn"; text = s.role === "pc" ? "Mac non connecté" : "PC non connecté"; }
+  if (s.link.state === "auth_failed") { cls = "error"; text = "Clé refusée"; }
+  else if (s.link.state === "waking") { cls = "warn"; text = "Réveil…"; }
+  else if (!connected) { cls = "warn"; text = "Non connecté"; }
   else if (errors) { cls = "error"; text = errors > 1 ? `${errors} problèmes` : "1 problème"; }
   else if (warns) { cls = "warn"; text = warns > 1 ? `${warns} avertissements` : "1 avertissement"; }
   pill.className = "pill " + cls;
@@ -550,6 +685,305 @@ async function refresh() {
     if (++failures >= 2) document.body.classList.add("offline");
   }
 }
+
+/* ------------------------------------------------------------------ réglages */
+
+let settingsData = null;
+let edits = {};
+let activeTab = "general";
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) node.setAttribute(k, v === true ? "" : v);
+  }
+  node.append(...children.filter((c) => c !== null && c !== undefined));
+  return node;
+}
+
+function value(sec, key) {
+  if (edits[sec] && key in edits[sec]) return edits[sec][key];
+  return (settingsData.values[sec] || {})[key];
+}
+
+function setValue(sec, key, v) {
+  (edits[sec] = edits[sec] || {})[key] = v;
+}
+
+function field(labelText, control, help, stack) {
+  return el("div", { class: "field" + (stack ? " stack" : "") },
+    el("div", { class: "label" }, labelText),
+    el("div", { class: "control" }, ...(Array.isArray(control) ? control : [control])),
+    help ? el("div", { class: "help" }, help) : null);
+}
+
+function toggleField(labelText, sec, key, help) {
+  const btn = el("button", { class: "toggle", role: "switch", "aria-label": labelText,
+                             "aria-checked": String(!!value(sec, key)) });
+  btn.addEventListener("click", () => {
+    const next = btn.getAttribute("aria-checked") !== "true";
+    btn.setAttribute("aria-checked", String(next));
+    setValue(sec, key, next);
+  });
+  return field(labelText, btn, help);
+}
+
+function textField(labelText, sec, key, help, placeholder) {
+  const input = el("input", { type: "text", value: value(sec, key) ?? "", placeholder, spellcheck: "false",
+                              "aria-label": labelText });
+  input.addEventListener("input", () => setValue(sec, key, input.value));
+  return field(labelText, input, help);
+}
+
+function rangeField(labelText, sec, key, min, max, step, fmt, help) {
+  const out = el("span", { class: "value" }, fmt(value(sec, key)));
+  const input = el("input", { type: "range", min, max, step, value: value(sec, key), "aria-label": labelText });
+  input.addEventListener("input", () => {
+    const v = Number(input.value);
+    out.textContent = fmt(v);
+    setValue(sec, key, v);
+  });
+  return field(labelText, [input, out], help);
+}
+
+function selectField(labelText, sec, key, options, help) {
+  const current = value(sec, key) ?? "";
+  const select = el("select", { "aria-label": labelText });
+  let found = false;
+  for (const [v, text] of options) {
+    const opt = el("option", { value: v }, text);
+    if (v === current) { opt.selected = true; found = true; }
+    select.append(opt);
+  }
+  if (!found && current) select.append(el("option", { value: current, selected: true }, `${current} (actuel)`));
+  select.addEventListener("change", () => setValue(sec, key, select.value));
+  return field(labelText, select, help);
+}
+
+function deviceField(labelText, sec, key, kind, emptyLabel, help) {
+  const list = (settingsData.devices || {})[kind === "input" ? "inputs" : "outputs"] || [];
+  return selectField(labelText, sec, key, [["", emptyLabel], ...list.map((n) => [n, n])], help);
+}
+
+function choiceField(labelText, sec, key, options) {
+  const name = `${sec}-${key}`;
+  const box = el("div", { class: "choices", role: "radiogroup", "aria-label": labelText });
+  for (const [v, title, sub] of options) {
+    const input = el("input", { type: "radio", name, value: v });
+    input.checked = value(sec, key) === v;
+    input.addEventListener("change", () => setValue(sec, key, v));
+    box.append(el("label", { class: "choice" }, input, el("div", {}, el("b", {}, title), el("span", {}, sub))));
+  }
+  return el("div", { class: "field stack" }, el("div", { class: "label" }, labelText), box);
+}
+
+const KEY_NAMES = { Space: "space", Enter: "enter", Tab: "tab", Escape: "esc", Backspace: "backspace",
+  ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", Home: "home", End: "end",
+  PageUp: "pageup", PageDown: "pagedown", Insert: "insert", Delete: "delete", Pause: "pause",
+  ScrollLock: "scrolllock", PrintScreen: "printscreen" };
+
+function codeToKey(code) {
+  if (KEY_NAMES[code]) return KEY_NAMES[code];
+  let m = code.match(/^Key([A-Z])$/); if (m) return m[1].toLowerCase();
+  m = code.match(/^Digit(\d)$/); if (m) return m[1];
+  m = code.match(/^F(\d{1,2})$/); if (m) return "f" + m[1];
+  m = code.match(/^Numpad(\d)$/); if (m) return "numpad" + m[1];
+  return null;
+}
+
+function hotkeyField(labelText, sec, key, help, optional) {
+  const input = el("input", { type: "text", value: value(sec, key) ?? "", spellcheck: "false",
+                              placeholder: optional ? "Aucun" : "ctrl+alt+space", "aria-label": labelText });
+  input.addEventListener("input", () => setValue(sec, key, input.value));
+  const rec = el("button", { class: "btn", type: "button" }, "Enregistrer");
+  const stop = () => { input.classList.remove("recording"); rec.textContent = "Enregistrer";
+                       window.removeEventListener("keydown", onKey, true); };
+  function onKey(e) {
+    e.preventDefault(); e.stopPropagation();
+    const k = codeToKey(e.code);
+    if (!k) return;  // on attend une touche non modificatrice
+    const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.shiftKey && "shift", e.metaKey && "win"].filter(Boolean);
+    input.value = [...mods, k].join("+");
+    setValue(sec, key, input.value);
+    stop();
+  }
+  rec.addEventListener("click", () => {
+    if (input.classList.contains("recording")) return stop();
+    input.classList.add("recording"); rec.textContent = "Appuie…";
+    window.addEventListener("keydown", onKey, true);
+  });
+  const controls = [input, rec];
+  if (optional) controls.push(el("button", { class: "btn", type: "button",
+    onclick: () => { input.value = ""; setValue(sec, key, ""); } }, "Effacer"));
+  return field(labelText, controls, help);
+}
+
+function secretField() {
+  const input = el("input", { type: "password", placeholder: "Inchangée", autocomplete: "off", spellcheck: "false",
+                              "aria-label": "Nouvelle clé" });
+  input.addEventListener("input", () => setValue("general", "secret", input.value));
+  const show = el("button", { class: "btn", type: "button" }, "Afficher");
+  show.addEventListener("click", () => {
+    input.type = input.type === "password" ? "text" : "password";
+    show.textContent = input.type === "password" ? "Afficher" : "Masquer";
+  });
+  const gen = el("button", { class: "btn", type: "button" }, "Générer");
+  gen.addEventListener("click", () => {
+    const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    input.value = Array.from(bytes, (b) => abc[b % abc.length]).join("");
+    input.type = "text"; show.textContent = "Masquer";
+    setValue("general", "secret", input.value);
+  });
+  return el("div", { class: "field stack" },
+    el("div", { class: "label" }, "Clé de connexion"),
+    el("div", { class: "secret-box" }, input, show, gen),
+    el("div", { class: "help" }, "Elle doit être identique sur les deux machines. Laisse vide pour la garder. "
+      + "Après un changement, mets la même clé sur l'autre machine."));
+}
+
+function buildSettings() {
+  const s = state, d = settingsData, body = $("settings-body");
+  const role = d.role;
+  const client = s ? machineName(s, "client") : "la machine pilotée";
+  const server = s ? machineName(s, "server") : "le serveur";
+  const parts = [];
+  if (activeTab === "general") {
+    if (role === "server") {
+      parts.push(textField("Nom de cet ordinateur", "server", "name", null, s?.machines.server.name || ""));
+      parts.push(hotkeyField("Raccourci de bascule", "server", "hotkey_toggle",
+        "Passe le clavier et la souris d'une machine à l'autre."));
+      parts.push(hotkeyField(`Aller sur ${client}`, "server", "hotkey_remote", "Facultatif.", true));
+      parts.push(hotkeyField("Revenir ici", "server", "hotkey_local", "Facultatif.", true));
+      parts.push(toggleField("Partager le presse-papiers", "server", "clipboard",
+        "Le texte copié suit la bascule."));
+      parts.push(toggleField(`Réveiller ${client} si elle dort`, "server", "wake_on_lan",
+        "Le raccourci envoie un signal de réveil réseau (Wake-on-LAN)."));
+      if (s?.machines.server.os === "mac") {
+        parts.push(selectField("Touche ⌘ envoyée comme", "server", "modifier_layout",
+          [["pc", "Ctrl (raccourcis façon Windows)"], ["mac", "Touche Windows / ⌘"]]));
+      }
+    } else {
+      parts.push(textField("Nom de cet ordinateur", "client", "name", null, s?.machines.client.name || ""));
+      parts.push(selectField("Touches Ctrl et Windows", "client", "modifier_layout",
+        [["pc", "Ctrl = ⌘, Windows = Ctrl (comme sur un PC)"], ["mac", "Windows = ⌘, Ctrl = Ctrl (façon Apple)"]],
+        "Sur un Mac piloté : avec « comme sur un PC », Ctrl+C copie."));
+      parts.push(rangeField("Vitesse du curseur", "client", "mouse_speed", 0.2, 3, 0.1, (v) => `${Number(v).toFixed(1)}×`));
+      parts.push(rangeField("Vitesse de défilement", "client", "scroll_speed", 1, 10, 0.5, (v) => `${Number(v)} lignes`));
+      parts.push(toggleField("Inverser le défilement", "client", "invert_scroll"));
+      parts.push(toggleField("Inverser les touches ² et <", "client", "swap_iso_keys",
+        "Seulement si ces deux touches sont échangées."));
+      parts.push(toggleField("Partager le presse-papiers", "client", "clipboard"));
+      parts.push(selectField("Mise en veille", "client", "prevent_sleep",
+        [["power", "Rester joignable sur secteur"], ["always", "Rester joignable, même sur batterie"],
+         ["never", "Laisser l'ordinateur s'endormir"]],
+        "Tant que le serveur est connecté, seul l'écran s'éteint : le raccourci le rallume."));
+    }
+  } else if (activeTab === "audio") {
+    parts.push(toggleField("Audio activé", "audio", "enabled"));
+    if (role === "server") {
+      parts.push(el("div", { class: "section-title" }, "Pistes audio de cet ordinateur"));
+      parts.push(deviceField("Sortie (casque)", "audio", "server_output_device", "output", "Par défaut du système",
+        `Où tu entends le son de ${client}.`));
+      parts.push(deviceField("Entrée (micro)", "audio", "server_input_device", "input", "Par défaut du système",
+        `Le micro envoyé à ${client}.`));
+      parts.push(selectField("Canal du micro", "audio", "mic_channel",
+        [[1, "Entrée 1"], [2, "Entrée 2"]].map(([v, t]) => [v, t])));
+      parts.push(el("div", { class: "section-title" }, "Partage"));
+      parts.push(choiceField("Son", "audio", "sound_mode", [
+        ["mix", "Les deux en même temps", `Le son de ${client} se mélange à celui de ${server}, en permanence.`],
+        ["follow", "Suivre le contrôle", `Le son de ${client} n'arrive dans le casque que lorsque tu la pilotes.`]]));
+      parts.push(choiceField("Micro", "audio", "mic_mode", [
+        ["always", "Sur les deux en même temps", `Le micro reste disponible sur ${client}, même quand tu es ici.`],
+        ["follow", "Suivre le contrôle", `Le micro n'est envoyé à ${client} que lorsque tu la pilotes.`]]));
+      parts.push(rangeField(`Volume du son de ${client}`, "audio", "sound_gain", 0, 2, 0.05, (v) => `${Math.round(v * 100)} %`));
+      parts.push(rangeField("Volume du micro", "audio", "mic_gain", 0, 2, 0.05, (v) => `${Math.round(v * 100)} %`));
+    } else {
+      parts.push(el("div", { class: "section-title" }, "Pistes audio de cet ordinateur"));
+      parts.push(deviceField("Capture du son", "audio", "client_capture_device", "input", "Désactivée",
+        "Le son de cet ordinateur envoyé au casque. Sur Mac : BlackHole 2ch, la sortie du Mac étant réglée dessus."));
+      parts.push(deviceField("Micro virtuel", "audio", "client_mic_device", "output", "Désactivé",
+        "Où arrive le micro du serveur. Sur Mac : BlackHole 16ch, à choisir comme micro dans tes applis."));
+      parts.push(el("div", { class: "help", style: "padding:10px 0" },
+        "Le choix entre « les deux en même temps » et « suivre le contrôle » se fait dans les réglages du serveur."));
+    }
+    parts.push(rangeField("Tampon audio", "audio", "latency_ms", 10, 120, 5, (v) => `${v} ms`,
+      "Plus petit = moins de retard. Monte-le si le son craque (Wi-Fi)."));
+    if (d.devices && d.devices.error) parts.push(el("div", { class: "help" }, `Périphériques indisponibles : ${d.devices.error}`));
+  } else {
+    if (role === "client") {
+      parts.push(textField("Adresse du serveur", "client", "server",
+        "Vide = recherche automatique sur le réseau local. Sinon l'IP du serveur, par ex. 192.168.1.15.", "Automatique"));
+    } else {
+      parts.push(el("div", { class: "help", style: "padding:10px 0" },
+        "Les autres machines trouvent ce serveur toutes seules sur le réseau local. "
+        + "Si ce n'est pas le cas, indique-leur son adresse IP dans leurs réglages."));
+    }
+    parts.push(secretField());
+  }
+  body.replaceChildren(...parts);
+}
+
+async function openSettings(tab) {
+  try {
+    settingsData = await api("/api/settings");
+  } catch (e) {
+    toast("Réglages indisponibles");
+    return;
+  }
+  edits = {};
+  activeTab = tab || "general";
+  for (const t of document.querySelectorAll(".tabs button")) t.setAttribute("aria-selected", String(t.dataset.tab === activeTab));
+  buildSettings();
+  $("settings").classList.add("open");
+  setTimeout(() => $("settings-body").querySelector("input, select, button")?.focus(), 50);
+}
+
+function closeSettings() { $("settings").classList.remove("open"); }
+
+async function saveSettings() {
+  const values = {};
+  for (const [sec, obj] of Object.entries(edits)) {
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === "mic_channel") (values[sec] = values[sec] || {})[k] = Number(v);
+      else (values[sec] = values[sec] || {})[k] = v;
+    }
+  }
+  if (!Object.keys(values).length) { closeSettings(); return; }
+  const btn = $("save-settings");
+  btn.disabled = true;
+  try {
+    const r = await api("/api/settings", { values });
+    if (r.ok) { closeSettings(); toast(r.message || "Enregistré", true); }
+    else toast(r.message || "Enregistrement impossible");
+  } catch (e) {
+    toast("SetupDouble ne répond pas");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+for (const t of document.querySelectorAll(".tabs button")) {
+  t.addEventListener("click", () => {
+    activeTab = t.dataset.tab;
+    for (const o of document.querySelectorAll(".tabs button")) o.setAttribute("aria-selected", String(o === t));
+    buildSettings();
+  });
+}
+$("open-settings").addEventListener("click", () => openSettings("general"));
+$("open-audio").addEventListener("click", () => openSettings("audio"));
+$("close-settings").addEventListener("click", closeSettings);
+$("cancel-settings").addEventListener("click", closeSettings);
+$("save-settings").addEventListener("click", saveSettings);
+$("settings").addEventListener("click", (e) => { if (e.target === $("settings")) closeSettings(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("settings").classList.contains("open")
+      && !document.querySelector("input.recording")) closeSettings();
+});
+
+/* ------------------------------------------------------------------ actions */
 
 $("seg").addEventListener("click", (e) => {
   const btn = e.target.closest("button");

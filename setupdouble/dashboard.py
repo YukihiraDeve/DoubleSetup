@@ -29,11 +29,14 @@ TOKEN_HEADER = "X-SD-Token"
 _PIXEL = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00"
           b"\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
 _ALLOWED_HOSTS = {"127.0.0.1", "localhost"}
+FAVICON = (Path(__file__).resolve().parent / "ui" / "favicon.svg").read_text(encoding="utf-8")
 
 
 class Provider(Protocol):
     def status(self) -> dict[str, Any]: ...
     def action(self, name: str, value: Any) -> tuple[bool, str]: ...
+    def settings(self) -> dict[str, Any]: ...
+    def save_settings(self, updates: dict) -> tuple[bool, str]: ...
 
 
 def check(cid: str, label: str, state: str, detail: str = "") -> dict[str, str]:
@@ -112,6 +115,12 @@ class Dashboard:
                     return self._send(200, dash.page(), "text/html; charset=utf-8")
                 if path == "/ping.gif":  # sonde utilisée par la page « agent arrêté »
                     return self._send(200, _PIXEL, "image/gif")
+                if path in ("/favicon.svg", "/favicon.ico"):
+                    return self._send(200, FAVICON.encode("utf-8"), "image/svg+xml")
+                if path == "/api/settings":
+                    if not self._token_ok():
+                        return self._json(401, {"error": "jeton invalide"})
+                    return self._json(200, dash.provider.settings())
                 if path == "/api/status":
                     if not self._token_ok():
                         return self._json(401, {"error": "jeton invalide"})
@@ -123,16 +132,21 @@ class Dashboard:
                 self._send(404, b"not found", "text/plain")
 
             def do_POST(self):  # noqa: N802
-                if not self._host_ok() or self.path != "/api/action":
+                if not self._host_ok() or self.path not in ("/api/action", "/api/settings"):
                     return self._send(403, b"forbidden", "text/plain")
                 if not self._token_ok():
                     return self._json(401, {"error": "jeton invalide"})
+                if (self.headers.get("Content-Type") or "").split(";")[0] != "application/json":
+                    return self._json(415, {"ok": False, "message": "JSON attendu"})
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    length = min(int(self.headers.get("Content-Length") or 0), 16384)
                     body = json.loads(self.rfile.read(length) or b"{}")
                     name = str(body.get("action", ""))
                 except (ValueError, AttributeError):
                     return self._json(400, {"ok": False, "message": "requête invalide"})
+                if self.path == "/api/settings":
+                    ok, message = dash.provider.save_settings(body.get("values") or {})
+                    return self._json(200 if ok else 400, {"ok": ok, "message": message})
                 try:
                     ok, message = dash.provider.action(name, body.get("value"))
                 except Exception as exc:

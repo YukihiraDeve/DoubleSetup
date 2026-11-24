@@ -33,17 +33,56 @@ KEY_NAMES.update({chr(c).lower(): c for c in range(ord("A"), ord("Z") + 1)})
 KEY_NAMES.update({str(d): 0x30 + d for d in range(10)})
 
 
+# Code virtuel Windows -> scancode PC (position QWERTY), pour macOS et Linux
+_LETTERS_SC = dict(zip("qwertyuiop", range(0x10, 0x1A)))
+_LETTERS_SC.update(zip("asdfghjkl", range(0x1E, 0x27)))
+_LETTERS_SC.update(zip("zxcvbnm", range(0x2C, 0x33)))
+VK_TO_SC: dict[int, int] = {ord(c.upper()): sc for c, sc in _LETTERS_SC.items()}
+VK_TO_SC.update({0x31 + i: 0x02 + i for i in range(9)})
+VK_TO_SC[0x30] = 0x0B
+VK_TO_SC.update({0x70 + i: 0x3B + i for i in range(10)})  # F1..F10
+VK_TO_SC.update({0x7A: 0x57, 0x7B: 0x58})                   # F11, F12
+VK_TO_SC.update({0x7C + i: 0x64 + i for i in range(7)})    # F13..F19
+VK_TO_SC.update({
+    0x20: 0x39, 0x0D: 0x1C, 0x09: 0x0F, 0x1B: 0x01, 0x08: 0x0E,
+    0x25: 0xE04B, 0x26: 0xE048, 0x27: 0xE04D, 0x28: 0xE050,
+    0x24: 0xE047, 0x23: 0xE04F, 0x21: 0xE049, 0x22: 0xE051, 0x2D: 0xE052, 0x2E: 0xE053,
+    0x91: 0x46, 0x13: 0xE046, 0x2C: 0xE037,
+})
+VK_TO_SC.update(dict(zip(range(0x60, 0x6A), (0x52, 0x4F, 0x50, 0x51, 0x4B, 0x4C, 0x4D,
+                                              0x47, 0x48, 0x49))))
+MOD_SCS = {
+    "ctrl": (0x1D, 0xE01D),
+    "alt": (0x38, 0xE038),
+    "shift": (0x2A, 0x36),
+    "win": (0xE05B, 0xE05C),
+}
+MOD_SC_ALL = {sc for pair in MOD_SCS.values() for sc in pair}
+
+
 @dataclass(frozen=True)
 class Hotkey:
-    action: str          # "toggle", "mac" ou "pc"
+    action: str          # "toggle", "remote" ou "local"
     mods: frozenset      # {"ctrl", "alt", ...}
     vk: int
     text: str
 
+    @property
+    def sc(self) -> int | None:
+        return VK_TO_SC.get(self.vk)
+
     def matches(self, vk: int, down_vks: set[int]) -> bool:
+        """Version Windows : codes virtuels."""
         if vk != self.vk:
             return False
         return all(any(v in down_vks for v in MOD_VKS[m]) for m in self.mods)
+
+    def matches_sc(self, sc: int, down_scs: set[int]) -> bool:
+        """Version macOS/Linux : scancodes PC. Les modificateurs en trop sont refusés."""
+        if sc != self.sc:
+            return False
+        held = {m for m, pair in MOD_SCS.items() if any(c in down_scs for c in pair)}
+        return held == set(self.mods)
 
 
 def parse_hotkey(text: str, action: str) -> Hotkey:

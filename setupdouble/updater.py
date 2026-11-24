@@ -55,7 +55,9 @@ def find_git() -> str | None:
 
 
 def requirements_file() -> str:
-    return "requirements-win.txt" if sys.platform == "win32" else "requirements-mac.txt"
+    if sys.platform == "win32":
+        return "requirements-win.txt"
+    return "requirements-mac.txt" if sys.platform == "darwin" else "requirements-linux.txt"
 
 
 class Updater:
