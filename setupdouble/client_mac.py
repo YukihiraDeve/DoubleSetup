@@ -419,7 +419,10 @@ class Client:
 
     def action(self, name: str, value=None) -> tuple[bool, str]:
         if name == "open_log":
-            subprocess.Popen(["open", str(LOG_DIR / "client.log")])
+            log_file = LOG_DIR / "client.log"
+            if not log_file.exists():
+                return False, "Pas encore de journal : l'agent n'a jamais tourné sur ce Mac."
+            subprocess.Popen(["open", str(log_file)])
             return True, ""
         if self.link_state != "connected" or self._writer is None:
             return False, "Le Mac n'est pas connecté au PC."
