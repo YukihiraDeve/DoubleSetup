@@ -120,7 +120,11 @@ class Dashboard:
                 if path == "/api/settings":
                     if not self._token_ok():
                         return self._json(401, {"error": "jeton invalide"})
-                    return self._json(200, dash.provider.settings())
+                    try:
+                        return self._json(200, dash.provider.settings())
+                    except Exception as exc:
+                        log.exception("réglages")
+                        return self._json(500, {"error": f"{type(exc).__name__} : {exc}"})
                 if path == "/api/display":
                     if not self._token_ok():
                         return self._json(401, {"error": "jeton invalide"})

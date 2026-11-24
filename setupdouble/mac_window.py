@@ -9,6 +9,7 @@ from Foundation import NSURL, NSMakeRect, NSObject, NSURLRequest
 
 WIDTH, HEIGHT = 880, 700
 TITLEBAR = 52
+DRAG_WIDTH = 170  # le logo « SetupDouble » est là ; rien de cliquable dessous
 
 
 class DragStrip(AppKit.NSView):
@@ -59,9 +60,11 @@ class AppDelegate(NSObject):
         web.setValue_forKey_(False, "drawsBackground")  # pas de flash blanc au chargement
         content.addSubview_(web)
 
+        # Zone de déplacement limitée au coin haut-gauche (à côté des boutons de fenêtre) :
+        # elle ne doit jamais recouvrir un bouton de la page (roue dentée, pastille…).
         strip = DragStrip.alloc().initWithFrame_(
-            NSMakeRect(78, bounds.size.height - TITLEBAR, bounds.size.width - 300, TITLEBAR))
-        strip.setAutoresizingMask_(AppKit.NSViewWidthSizable | AppKit.NSViewMinYMargin)
+            NSMakeRect(78, bounds.size.height - TITLEBAR, DRAG_WIDTH, TITLEBAR))
+        strip.setAutoresizingMask_(AppKit.NSViewMinYMargin | AppKit.NSViewMaxXMargin)
         content.addSubview_positioned_relativeTo_(strip, AppKit.NSWindowAbove, web)
 
         base = NSURL.URLWithString_(self.url)

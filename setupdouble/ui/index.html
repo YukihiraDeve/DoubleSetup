@@ -1037,7 +1037,7 @@ async function openSettings(tab) {
   try {
     settingsData = await api("/api/settings");
   } catch (e) {
-    toast("Réglages indisponibles");
+    toast(`Réglages indisponibles : ${e.message || e}`);
     return;
   }
   edits = {};
