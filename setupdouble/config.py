@@ -28,6 +28,7 @@ DEFAULTS: dict = {
         "clipboard": True,
         "name": "",
         "ui_port": 47810,  # tableau de bord local (127.0.0.1), 0 = désactivé
+        "wake_on_lan": True,  # le raccourci réveille le Mac s'il dort
     },
     "client": {
         "server": "",
@@ -41,6 +42,7 @@ DEFAULTS: dict = {
         "clipboard": True,
         "name": "",
         "ui_port": 47811,
+        "prevent_sleep": "power",  # power, always ou never
     },
     "audio": {
         "enabled": True,

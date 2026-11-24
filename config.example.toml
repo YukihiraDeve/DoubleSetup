@@ -24,6 +24,7 @@ hotkey_pc = ""                      # facultatif : revenir directement au PC (ex
 clipboard = true              # partage du texte copié au moment de la bascule
 name = ""                     # nom affiché (défaut : nom du PC)
 ui_port = 47810               # fenêtre de statut (locale uniquement), 0 = désactivée
+wake_on_lan = true            # si le Mac dort, le raccourci le réveille puis bascule
 
 [client]   # ----- Mac
 server = ""                   # IP du PC ; vide = découverte automatique
@@ -40,6 +41,10 @@ invert_scroll = false
 clipboard = true
 name = ""
 ui_port = 47811               # fenêtre de statut (locale uniquement), 0 = désactivée
+# Tant que le PC est connecté, le Mac ne s'endort pas (seul l'écran s'éteint),
+# donc le raccourci le rallume tout de suite :
+#   "power" = seulement sur secteur, "always" = aussi sur batterie, "never" = jamais
+prevent_sleep = "power"
 
 [audio]
 enabled = true

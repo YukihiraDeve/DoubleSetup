@@ -172,6 +172,19 @@ def dec_audio(packet: bytes) -> tuple[int, int, bytes] | None:
     return stream, seq, packet[AUDIO_HDR_SIZE:]
 
 
+# --- Réveil (Wake-on-LAN) ---------------------------------------------------------
+
+WOL_PORTS = (9, 7)
+
+
+def magic_packet(mac: str) -> bytes:
+    """Paquet magique Wake-on-LAN : 6 x FF puis 16 fois l'adresse MAC."""
+    raw = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+    if len(raw) != 6:
+        raise ValueError(f"adresse MAC invalide : {mac!r}")
+    return b"\xff" * 6 + raw * 16
+
+
 # --- Découverte ---------------------------------------------------------------
 
 def enc_beacon(control_port: int, name: str) -> bytes:

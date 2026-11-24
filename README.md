@@ -86,6 +86,19 @@ Raccourcis clavier côté Mac, avec `modifier_layout = "pc"` (défaut) :
 
 Avec `modifier_layout = "mac"`, tu retrouves la disposition Apple : Windows = Cmd, Ctrl = Ctrl.
 
+## Mac en veille
+
+Le raccourci marche aussi quand le Mac dort :
+
+- **Écran éteint** : tant que le PC est connecté et que le Mac est sur secteur, SetupDouble empêche le Mac de s'endormir complètement. Seul l'écran s'éteint, et le raccourci le rallume tout de suite. Avec `prevent_sleep = "always"`, ça vaut aussi sur batterie ; avec `"never"`, la fonction est désactivée.
+- **Mac vraiment endormi** (pomme → Suspendre, ou capot fermé) : le PC envoie un signal de réveil (Wake-on-LAN), attend que le Mac se reconnecte, puis bascule tout seul. La fenêtre affiche « Réveil du Mac… » pendant l'attente.
+
+Pour le réveil, il faut :
+- le réglage *Réveiller pour l'accès au réseau* (`sudo pmset -a womp 1`), que le script d'installation active ;
+- que le Mac se soit connecté au moins une fois au PC, pour que le PC connaisse son adresse.
+
+Le réveil fonctionne surtout en Ethernet et sur secteur. En Wi-Fi ou depuis un sommeil profond, il dépend du matériel. C'est pour ça que garder le Mac éveillé sur secteur reste la solution la plus fiable.
+
 ## Fenêtre de statut
 
 Elle montre en un coup d'œil :

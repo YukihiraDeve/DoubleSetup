@@ -89,6 +89,21 @@ def discover(timeout: float = 3.0) -> tuple[str, int, str] | None:
         sock.close()
 
 
+def _computer_name() -> str:
+    """Nom du Mac tel qu'affiché dans Réglages (« MacBook Pro de … »)."""
+    try:
+        out = subprocess.run(["scutil", "--get", "ComputerName"], capture_output=True,
+                             text=True, timeout=2)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    host = socket.gethostname()
+    for suffix in (".local", ".home", ".lan"):
+        host = host.removesuffix(suffix)
+    return host
+
+
 class Client:
     def __init__(self, cfg: dict, injector, clipboard=None, use_audio: bool = True,
                  router=None):
@@ -96,7 +111,7 @@ class Client:
         self.ccfg = cfg["client"]
         self.acfg = cfg["audio"]
         self.secret = cfg["secret"]
-        self.name = self.ccfg["name"] or socket.gethostname().removesuffix(".local")
+        self.name = self.ccfg["name"] or _computer_name()
         self.injector = injector
         self.clipboard = clipboard if self.ccfg["clipboard"] else None
         self.use_audio = use_audio and bool(self.acfg["enabled"])
@@ -120,6 +135,9 @@ class Client:
         self.peer_info: dict = {}
         self.audio_flags: int | None = None  # dernier AUDIO_CTRL reçu
         self.accessibility = None  # callable -> bool, None = mode test
+        self.sleep_guard = None    # mac_system.SleepGuard
+        self.womp_check = None     # callable -> bool | None (réveil par le réseau)
+        self.wake_targets: list[dict] = []
         self.dry_run = False
         self._ping_sent = 0.0
         self._info_sent: str | None = None
@@ -202,6 +220,10 @@ class Client:
             self.connected_to = server_name
             self.link_state, self.link_detail = "connected", f"{server_name} ({host})"
             self.since = time.time()
+            from .mac_system import network_identity
+            self.wake_targets = network_identity()
+            if self.sleep_guard is not None:
+                self.sleep_guard.start()
             log.info("Connecté à %s (%s)", server_name, host)
             if self.use_audio:
                 self._start_audio(host, server_audio_port)
@@ -293,6 +315,8 @@ class Client:
             self._send(P.enc_text(P.CLIPBOARD, text, CLIP_LIMIT))
 
     def _end_session(self) -> None:
+        if self.sleep_guard is not None:
+            self.sleep_guard.stop()
         if self._session_stop is not None:
             self._session_stop.set()
             self._session_stop = None
@@ -354,6 +378,7 @@ class Client:
             checks.append(check("accessibility", "Accessibilité", "error",
                                 "À autoriser : Réglages Système → Confidentialité et sécurité "
                                 "→ Accessibilité → " + os.path.realpath(sys.executable)))
+        checks += self._sleep_checks()
         if not self.use_audio:
             checks.append(check("mac_audio", "Audio", "off", "Désactivé"))
             return checks
@@ -372,6 +397,30 @@ class Client:
                 checks.append(check("mac_route", "Routage audio", "ok", "Automatique"))
         return checks
 
+    def _sleep_checks(self) -> list[dict]:
+        checks = []
+        guard = self.sleep_guard
+        if guard is not None:
+            if guard.mode == "never":
+                checks.append(check("mac_sleep", "Veille", "off",
+                                    "Le Mac peut s'endormir (prevent_sleep = \"never\")"))
+            else:
+                where = "sur secteur" if guard.mode == "power" else "même sur batterie"
+                checks.append(check("mac_sleep", "Veille", "ok",
+                                    f"Reste joignable {where} : le raccourci rallume l'écran"))
+        if self.womp_check is not None:
+            stamp, womp = getattr(self, "_womp_cache", (0.0, None))
+            if time.monotonic() - stamp > 30:
+                womp = self.womp_check()
+                self._womp_cache = (time.monotonic(), womp)
+            if womp:
+                checks.append(check("mac_wake", "Réveil par le réseau", "ok",
+                                    "Le PC peut réveiller le Mac endormi"))
+            elif womp is False:
+                checks.append(check("mac_wake", "Réveil par le réseau", "warn",
+                                    "Désactivé : sudo pmset -a womp 1"))
+        return checks
+
     def _mic_flowing(self) -> bool:
         from .audio import flowing
         rx = self._mic_rx
@@ -379,7 +428,7 @@ class Client:
 
     def info(self) -> dict:
         return {"os": "mac", "name": self.name, "checks": self.local_checks(),
-                "flows": {"mic_rx": self._mic_flowing()}}
+                "flows": {"mic_rx": self._mic_flowing()}, "wake": self.wake_targets}
 
     def status(self) -> dict:
         connected = self.link_state == "connected"
@@ -582,6 +631,10 @@ def main(argv: list[str] | None = None) -> int:
                     router=router)
     client.accessibility = accessibility
     client.dry_run = args.dry_run
+    if not args.dry_run:
+        from .mac_system import SleepGuard, wake_on_lan_enabled
+        client.sleep_guard = SleepGuard(cfg["client"]["prevent_sleep"])
+        client.womp_check = wake_on_lan_enabled
     dashboard.start(client, int(cfg["client"]["ui_port"]))
     try:
         client.run_forever()

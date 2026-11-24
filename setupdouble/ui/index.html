@@ -106,6 +106,8 @@
   .wire i { position: absolute; top: -1px; width: 22px; height: 4px; border-radius: 4px;
             background: linear-gradient(90deg, transparent, #fff); opacity: 0; }
   .link.flow .wire i { opacity: .9; animation: flow 1.6s linear infinite; }
+  .link.waking .wire::before { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .15; } 50% { opacity: .7; } }
   .link.flow .wire i:nth-child(2) { animation-delay: .53s; }
   .link.flow .wire i:nth-child(3) { animation-delay: 1.06s; }
   @keyframes flow { from { left: -24px; } to { left: 100%; } }
@@ -200,6 +202,7 @@
            padding: 9px 16px; border-radius: 10px; background: rgba(40, 30, 60, .95); border: 1px solid rgba(255,95,126,.5);
            color: #ffd1da; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 20; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.info { border-color: rgba(142,168,255,.5); color: #dfe6ff; }
 
   @media (max-width: 680px) {
     .app { padding: 0 16px 16px; }
@@ -357,9 +360,10 @@ async function api(path, body) {
   return data;
 }
 
-function toast(msg) {
+function toast(msg, info) {
   const t = $("toast");
   t.textContent = msg;
+  t.classList.toggle("info", !!info);
   t.classList.add("show");
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
@@ -370,6 +374,7 @@ async function act(action, value) {
   try {
     const r = await api("/api/action", { action, value });
     if (!r.ok) { toast(r.message || "Action impossible"); pendingUntil = 0; }
+    else if (r.message) toast(r.message, true);
   } catch (e) {
     toast("SetupDouble ne répond pas");
     pendingUntil = 0;
@@ -412,12 +417,14 @@ function render(s) {
   // lien réseau
   const link = $("link");
   link.classList.toggle("connected", connected);
-  link.classList.toggle("broken", !connected);
+  link.classList.toggle("broken", !connected && s.link.state !== "waking");
+  link.classList.toggle("waking", s.link.state === "waking");
   link.classList.toggle("flow", connected && s.active === "mac");
   const label = $("link-label");
   label.replaceChildren();
   const b = document.createElement("b");
-  const titles = { connected: "Connecté", waiting: "En attente du Mac", searching: "Recherche du PC",
+  const titles = { connected: "Connecté", waiting: "En attente du Mac", waking: "Réveil du Mac…",
+                   searching: "Recherche du PC",
                    connecting: "Connexion…", auth_failed: "Secret refusé", error: "PC injoignable" };
   b.textContent = titles[s.link.state] || s.link.state;
   label.append(b, connected && s.link.rtt_ms != null ? `${Math.max(1, Math.round(s.link.rtt_ms))} ms` : "");
@@ -428,11 +435,16 @@ function render(s) {
   if (Date.now() > pendingUntil) seg.dataset.active = s.active;
   for (const btn of seg.querySelectorAll("button")) {
     btn.setAttribute("aria-checked", String(seg.dataset.active === btn.dataset.target));
-    btn.disabled = !connected && btn.dataset.target === "mac" && s.active !== "mac";
+    btn.disabled = !connected && !s.can_wake && btn.dataset.target === "mac" && s.active !== "mac";
   }
   const hint = $("hint");
   hint.replaceChildren();
-  if (!connected) {
+  if (s.link.state === "waking") {
+    hint.append("Réveil du Mac : la bascule se fera dès qu'il répond.");
+  } else if (!connected && s.can_wake) {
+    hint.append("Le Mac dort ? ", ...(s.hotkey ? [hotkeyHtml(s.hotkey), " ou "] : []),
+                "« Sur le Mac » le réveille.");
+  } else if (!connected) {
     hint.append(s.role === "pc" ? "Lance l'agent sur le Mac pour pouvoir basculer."
                                  : (s.link.detail || "Recherche du PC…"));
   } else if (s.hotkey) {
@@ -517,6 +529,7 @@ function renderPill(s, connected) {
   const errors = s.checks.filter((c) => c.state === "error").length;
   const warns = s.checks.filter((c) => c.state === "warn").length;
   if (s.link.state === "auth_failed") { cls = "error"; text = "Secret refusé"; }
+  else if (s.link.state === "waking") { cls = "warn"; text = "Réveil du Mac…"; }
   else if (!connected) { cls = "warn"; text = s.role === "pc" ? "Mac non connecté" : "PC non connecté"; }
   else if (errors) { cls = "error"; text = errors > 1 ? `${errors} problèmes` : "1 problème"; }
   else if (warns) { cls = "warn"; text = warns > 1 ? `${warns} avertissements` : "1 avertissement"; }

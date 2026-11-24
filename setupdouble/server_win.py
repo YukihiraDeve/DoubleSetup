@@ -137,7 +137,7 @@ def run_tray(server: Server, capture: win_input.InputCapture, log_path: Path,
         Item(f"Basculer ({hotkey_text})", toggle, default=True, visible=False),
         Menu.SEPARATOR,
         Item("Contrôler le Mac", to_mac, checked=lambda i: server.remote, radio=True,
-             enabled=lambda i: server.connected),
+             enabled=lambda i: server.connected or server.can_wake),
         Item("Contrôler le PC", to_pc, checked=lambda i: not server.remote, radio=True),
         Menu.SEPARATOR,
         Item("Son du Mac dans le casque", sound, checked=lambda i: server.sound_on,
@@ -200,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     server.input = capture
     server.hotkey_check = lambda: hotkey_check(capture, hotkeys)
     server.open_log = lambda: os.startfile(log_path)  # type: ignore[attr-defined]
+    server.wake_store = LOG_DIR / "mac.json"
     capture.start()
     server.start()
     dashboard.start(server, int(s["ui_port"]))

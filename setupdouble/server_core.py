@@ -14,6 +14,7 @@ import socket
 import struct
 import threading
 import time
+from pathlib import Path
 from typing import Callable, Protocol
 
 from . import __version__
@@ -25,6 +26,8 @@ log = logging.getLogger(__name__)
 
 PING_INTERVAL = 2.0
 DEAD_AFTER = 8.0
+STALE_AFTER = 4.5    # plus de réponse aux pings : le Mac s'est probablement endormi
+WAKE_TIMEOUT = 30.0  # temps laissé au Mac pour se réveiller et se reconnecter
 _STOP = ("stop",)
 
 
@@ -89,6 +92,9 @@ class Server:
         self.hotkey_text = self.scfg["hotkey_toggle"] or self.scfg["hotkey_mac"]
         self.hotkey_check: Callable[[], dict] | None = None  # fourni par server_win
         self.open_log: Callable[[], None] | None = None
+        self.wake_store: Path | None = None  # où retenir l'adresse du Mac (server_win)
+        self.wake_targets: list[dict] = []
+        self._wake_until = 0.0
         self.listeners: list[Callable[[], None]] = []
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -101,6 +107,7 @@ class Server:
     # --- Cycle de vie -----------------------------------------------------------
 
     def start(self) -> None:
+        self._load_wake_targets()
         self._tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._tcp.bind((self.scfg["bind"], int(self.scfg["control_port"])))
@@ -157,7 +164,7 @@ class Server:
     def status_text(self) -> str:
         s = self.session
         if s is None:
-            return "En attente du Mac…"
+            return "Réveil du Mac…" if self.waking else "En attente du Mac…"
         where = "Mac actif" if self.remote else "PC actif"
         return f"{where} · {s.name} ({s.addr[0]})"
 
@@ -190,7 +197,10 @@ class Server:
         """État complet pour le tableau de bord (voir dashboard.py)."""
         s = self.session
         peer = s.peer_info if s else {}
-        if s is not None:
+        if self.waking:
+            link = {"state": "waking", "detail": "Réveil du Mac en cours…",
+                    "rtt_ms": None, "since": None}
+        elif s is not None:
             rtt = f" · {s.rtt_ms:.0f} ms" if s.rtt_ms is not None else ""
             link = {"state": "connected", "detail": f"{s.name} ({s.addr[0]}){rtt}",
                     "rtt_ms": s.rtt_ms, "since": s.since}
@@ -218,12 +228,15 @@ class Server:
             },
             "checks": checks,
             "peer_reported": bool(peer),
+            "can_wake": self.can_wake,
         }
 
     def action(self, name: str, value=None) -> tuple[bool, str]:
         """Actions déclenchées depuis le tableau de bord."""
         if name in ("mac", "toggle") and self.session is None \
                 and (name == "mac" or not self.remote):
+            if self.wake_mac():
+                return True, "Réveil du Mac… la bascule se fera dès qu'il répond."
             return False, "Le Mac n'est pas connecté."
         if name in ("mac", "pc", "toggle"):
             self.on_hotkey(name)
@@ -257,11 +270,91 @@ class Server:
         self._changed()
 
     def request_mode(self, remote: bool) -> None:
-        if remote and self.session is None:
-            self.notify("Le Mac n'est pas connecté.")
+        s = self.session
+        if remote and s is not None and not self.remote \
+                and time.monotonic() - s.last_rx > STALE_AFTER and self.can_wake:
+            # le Mac ne répond plus aux pings : il vient sans doute de s'endormir
+            log.info("Le Mac ne répond plus depuis %.0f s : réveil",
+                     time.monotonic() - s.last_rx)
+            self.wake_mac()
             return
+        if remote and self.session is None:
+            if not self.wake_mac():
+                self.notify("Le Mac n'est pas connecté.")
+            return
+        if not remote:
+            self._wake_until = 0.0  # on abandonne un réveil en cours
         if self.input is not None:
             self.input.request_mode(remote)
+
+    # --- Réveil du Mac (Wake-on-LAN) ---------------------------------------------------
+
+    @property
+    def can_wake(self) -> bool:
+        return bool(self.scfg.get("wake_on_lan", True) and self.wake_targets)
+
+    @property
+    def waking(self) -> bool:
+        return self._wake_until > time.monotonic()
+
+    def wake_mac(self) -> bool:
+        """Envoie le paquet magique et bascule dès que le Mac se reconnecte."""
+        if not self.can_wake:
+            return False
+        first = not self.waking
+        self._wake_until = time.monotonic() + WAKE_TIMEOUT
+        self._send_magic()
+        if first:
+            log.info("Réveil du Mac demandé")
+            self.notify("Réveil du Mac…")
+            self._changed()
+        return True
+
+    def _send_magic(self) -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        try:
+            for t in self.wake_targets:
+                try:
+                    packet = P.magic_packet(t["mac"])
+                except (KeyError, ValueError):
+                    continue
+                dests = {"255.255.255.255", t.get("broadcast") or "", t.get("ip") or ""}
+                for host in filter(None, dests):
+                    for port in P.WOL_PORTS:
+                        try:
+                            sock.sendto(packet, (host, port))
+                        except OSError:
+                            pass
+        finally:
+            sock.close()
+
+    def _load_wake_targets(self) -> None:
+        if self.wake_store is None or not self.wake_store.exists():
+            return
+        try:
+            data = json.loads(self.wake_store.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                self.wake_targets = [t for t in data if isinstance(t, dict) and t.get("mac")]
+        except (OSError, ValueError):
+            pass
+
+    def _remember_wake_targets(self, targets) -> None:
+        if not isinstance(targets, list):
+            return
+        clean = [{k: str(t.get(k, "")) for k in ("iface", "mac", "ip", "broadcast")}
+                 for t in targets if isinstance(t, dict) and t.get("mac")]
+        if not clean or clean == self.wake_targets:
+            return
+        self.wake_targets = clean
+        if self.wake_store is not None:
+            try:
+                self.wake_store.parent.mkdir(parents=True, exist_ok=True)
+                self.wake_store.write_text(json.dumps(clean, indent=2), encoding="utf-8")
+                log.info("Adresse de réveil du Mac enregistrée : %s",
+                         ", ".join(t["mac"] for t in clean))
+            except OSError as exc:
+                log.warning("Impossible d'enregistrer l'adresse du Mac : %s", exc)
 
     # --- Audio ----------------------------------------------------------------------
 
@@ -391,6 +484,10 @@ class Server:
             self._sound_rx.reset()
         log.info("Mac connecté : %s (%s)", name, addr[0])
         self.notify(f"Mac connecté : {name}")
+        if self._wake_until > time.monotonic():
+            self._wake_until = 0.0
+            log.info("Mac réveillé : bascule demandée pendant le réveil")
+            self.request_mode(True)
         self._changed()
 
         sock.settimeout(DEAD_AFTER + 2)
@@ -407,6 +504,11 @@ class Server:
                 elif msg_type == P.PONG:
                     if session.ping_sent:
                         session.rtt_ms = (time.monotonic() - session.ping_sent) * 1000
+                    if self._wake_until and session is self.session:
+                        # le Mac répond de nouveau : il ne dormait pas, on bascule
+                        self._wake_until = 0.0
+                        self.request_mode(True)
+                        self._changed()
                 elif msg_type == P.INFO:
                     try:
                         info = json.loads(payload.decode("utf-8"))
@@ -414,6 +516,7 @@ class Server:
                         continue
                     if isinstance(info, dict):
                         session.peer_info = info
+                        self._remember_wake_targets(info.get("wake"))
                         self._changed()
                 elif msg_type == P.REQ_MODE:
                     self.on_hotkey("mac" if payload[:1] == b"\x01" else "pc")
@@ -509,6 +612,14 @@ class Server:
         while not self._stop.wait(PING_INTERVAL):
             s = self.session
             if s is None:
+                if self._wake_until:
+                    if time.monotonic() < self._wake_until:
+                        self._send_magic()  # certains Mac ne se réveillent qu'au 2e ou 3e paquet
+                    else:
+                        self._wake_until = 0.0
+                        log.warning("Le Mac ne s'est pas réveillé")
+                        self.notify("Le Mac ne s'est pas réveillé.")
+                        self._changed()
                 continue
             if time.monotonic() - s.last_rx > DEAD_AFTER:
                 log.warning("Le Mac ne répond plus")

@@ -49,6 +49,11 @@ if [[ $AUDIO == 1 ]]; then
 else
   echo "== 1/5 Audio ignoré (--no-audio)"
 fi
+# Réveil par le réseau : le raccourci du PC peut réveiller le Mac endormi
+if [[ "$(pmset -g | awk '$1 == "womp" {print $2}')" != "1" ]]; then
+  echo "Activation du réveil par le réseau (mot de passe administrateur)"
+  sudo pmset -a womp 1 || echo "Impossible d'activer le réveil par le réseau (sudo pmset -a womp 1)"
+fi
 
 echo "== 2/5 Environnement Python"
 if ! command -v uv >/dev/null; then brew install uv; fi
