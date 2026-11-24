@@ -64,3 +64,15 @@ def parse_hotkey(text: str, action: str) -> Hotkey:
     if key is None:
         raise ValueError(f"raccourci « {text} » : il manque une touche")
     return Hotkey(action, frozenset(mods), key, text)
+
+
+_PRETTY = {"ctrl": "Ctrl", "alt": "Alt", "shift": "Maj", "win": "Win", "space": "Espace",
+           "right": "→", "left": "←", "up": "↑", "down": "↓", "enter": "Entrée",
+           "tab": "Tab", "esc": "Échap"}
+
+
+def pretty(text: str) -> str:
+    """« ctrl+alt+space » -> « Ctrl + Alt + Espace » (pour l'interface)."""
+    parts = [p.strip().lower() for p in text.split("+") if p.strip()]
+    return " + ".join(_PRETTY.get(p, p.upper() if len(p) <= 3 else p.capitalize())
+                      for p in parts)

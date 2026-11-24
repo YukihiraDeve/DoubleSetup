@@ -27,6 +27,7 @@ DEFAULTS: dict = {
         "hotkey_pc": "",
         "clipboard": True,
         "name": "",
+        "ui_port": 47810,  # tableau de bord local (127.0.0.1), 0 = désactivé
     },
     "client": {
         "server": "",
@@ -39,6 +40,7 @@ DEFAULTS: dict = {
         "invert_scroll": False,
         "clipboard": True,
         "name": "",
+        "ui_port": 47811,
     },
     "audio": {
         "enabled": True,

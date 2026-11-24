@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SetupDouble</title>
+<style>
+  :root {
+    --bg-1: #1c1538;
+    --bg-2: #0d1a36;
+    --glow-1: rgba(122, 92, 255, .45);
+    --glow-2: rgba(0, 190, 200, .28);
+    --card: rgba(255, 255, 255, .065);
+    --card-hover: rgba(255, 255, 255, .09);
+    --line: rgba(255, 255, 255, .11);
+    --text: #f5f6fa;
+    --text-2: rgba(235, 238, 255, .64);
+    --text-3: rgba(235, 238, 255, .40);
+    --accent: #8ea8ff;
+    --accent-2: #b38cff;
+    --ok: #3ddc97;
+    --warn: #ffbd4a;
+    --err: #ff5f7e;
+    --switch-on: #34c759;
+    --radius: 16px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 13px/1.4 var(--font);
+    color: var(--text);
+    background:
+      radial-gradient(900px 520px at 8% -10%, var(--glow-1), transparent 60%),
+      radial-gradient(700px 480px at 105% 110%, var(--glow-2), transparent 60%),
+      linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; }
+
+  .app { max-width: 920px; margin: 0 auto; padding: 0 28px 24px; min-height: 100%;
+         display: flex; flex-direction: column; gap: 16px; }
+
+  /* --- barre du haut (laisse la place aux boutons de fenêtre macOS) */
+  .top { height: 56px; display: flex; align-items: center; justify-content: space-between;
+         padding-left: 64px; }
+  body.browser .top { padding-left: 0; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px;
+           letter-spacing: .2px; color: var(--text-2); }
+  .logo { width: 20px; height: 20px; border-radius: 6px;
+          background: linear-gradient(135deg, var(--accent-2), #3fc8d8);
+          box-shadow: 0 2px 10px rgba(140, 110, 255, .5); position: relative; }
+  .logo::before, .logo::after { content: ""; position: absolute; top: 6px; width: 6px; height: 8px;
+          border: 1.5px solid rgba(255,255,255,.95); border-radius: 2px; }
+  .logo::before { left: 3px; } .logo::after { right: 3px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 13px 0 11px;
+          border-radius: 999px; background: var(--card); border: 1px solid var(--line);
+          font-weight: 500; color: var(--text); backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px); transition: background .3s; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+  .ok > .dot, .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .warn > .dot, .dot.warn { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+  .error > .dot, .dot.error { background: var(--err); box-shadow: 0 0 10px var(--err); }
+  .dot.off { background: var(--text-3); }
+
+  /* --- scène : les deux machines */
+  .stage { display: grid; grid-template-columns: 1fr minmax(120px, 190px) 1fr; align-items: center;
+           gap: 8px; }
+  .machine { position: relative; display: flex; flex-direction: column; align-items: center;
+             padding: 22px 16px 16px; border-radius: 22px; background: var(--card);
+             border: 1px solid var(--line); transition: opacity .35s, transform .35s, box-shadow .35s,
+             background .35s; opacity: .55; min-height: 212px; }
+  .machine.active { opacity: 1; background: rgba(255,255,255,.085);
+             box-shadow: 0 0 0 1px rgba(150, 170, 255, .45), 0 24px 70px -24px rgba(120, 95, 255, .75); }
+  .machine.offline { filter: grayscale(1); }
+  .machine svg.device { width: 80px; height: 80px; color: var(--text-2); transition: color .35s; }
+  .machine.active svg.device { color: var(--text); filter: drop-shadow(0 6px 22px rgba(142,168,255,.55)); }
+  .machine .name { margin-top: 10px; font-size: 16px; font-weight: 600; max-width: 100%;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .machine .sub { color: var(--text-3); font-size: 12px; margin-top: 2px; min-height: 17px;
+                  font-variant-numeric: tabular-nums; }
+  .here { position: absolute; top: 12px; right: 12px; font-size: 10.5px; font-weight: 600;
+          letter-spacing: .3px; text-transform: uppercase; color: var(--text-3);
+          padding: 3px 7px; border-radius: 6px; border: 1px solid var(--line); }
+  .peripherals { display: flex; gap: 6px; margin-top: 12px; height: 26px;
+                 transition: opacity .35s, transform .35s; opacity: 0; transform: translateY(6px); }
+  .machine.active .peripherals { opacity: 1; transform: none; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; height: 26px;
+          border-radius: 8px; background: rgba(142,168,255,.16); color: #dfe6ff; font-size: 12px;
+          font-weight: 500; }
+  .chip svg { width: 15px; height: 15px; }
+
+  .link { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .wire { position: relative; width: 100%; height: 2px; border-radius: 2px; overflow: hidden;
+          background: rgba(255,255,255,.12); }
+  .wire::before { content: ""; position: absolute; inset: 0; background: var(--ok); opacity: 0;
+                  transition: opacity .4s; }
+  .link.connected .wire::before { opacity: .55; }
+  .link.broken .wire { background: repeating-linear-gradient(90deg, rgba(255,255,255,.2) 0 6px, transparent 6px 12px); }
+  .wire i { position: absolute; top: -1px; width: 22px; height: 4px; border-radius: 4px;
+            background: linear-gradient(90deg, transparent, #fff); opacity: 0; }
+  .link.flow .wire i { opacity: .9; animation: flow 1.6s linear infinite; }
+  .link.flow .wire i:nth-child(2) { animation-delay: .53s; }
+  .link.flow .wire i:nth-child(3) { animation-delay: 1.06s; }
+  @keyframes flow { from { left: -24px; } to { left: 100%; } }
+  .link-label { font-size: 12px; color: var(--text-2); text-align: center; min-height: 34px;
+                font-variant-numeric: tabular-nums; }
+  .link-label b { display: block; font-weight: 600; color: var(--text); font-size: 12.5px; }
+
+  /* --- sélecteur PC / Mac */
+  .switch { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .seg { position: relative; display: grid; grid-template-columns: 1fr 1fr; width: min(440px, 100%);
+         padding: 4px; border-radius: 14px; background: rgba(0,0,0,.28); border: 1px solid var(--line); }
+  .thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+           border-radius: 10px; background: linear-gradient(135deg, rgba(160,140,255,.95), rgba(90,150,255,.95));
+           box-shadow: 0 6px 22px -6px rgba(120, 110, 255, .9), inset 0 1px 0 rgba(255,255,255,.3);
+           transition: transform .42s cubic-bezier(.3, 1.3, .5, 1); }
+  .seg[data-active="mac"] .thumb { transform: translateX(100%); }
+  .seg button { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
+                gap: 8px; height: 40px; border: 0; background: none; border-radius: 10px; cursor: pointer;
+                font-weight: 600; font-size: 13.5px; color: var(--text-2); transition: color .3s; }
+  .seg button svg { width: 17px; height: 17px; }
+  .seg button[aria-checked="true"] { color: #fff; }
+  .seg button:disabled { cursor: not-allowed; opacity: .45; }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { margin: 0; color: var(--text-3); font-size: 12px; text-align: center; }
+  kbd { font: 600 11px var(--font); color: var(--text-2); padding: 1px 6px; border-radius: 5px;
+        background: rgba(255,255,255,.08); border: 1px solid var(--line); border-bottom-width: 2px; }
+
+  /* --- cartes du bas */
+  .grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 14px; flex: 1; }
+  .card { border-radius: var(--radius); background: var(--card); border: 1px solid var(--line);
+          padding: 16px 18px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+          min-width: 0; }
+  .card h3 { margin: 0 0 8px; font-size: 11.5px; font-weight: 600; letter-spacing: .5px;
+             text-transform: uppercase; color: var(--text-3); display: flex; align-items: center;
+             justify-content: space-between; }
+  .link-btn { border: 0; background: none; color: var(--accent); font-size: 12px; font-weight: 500;
+              text-transform: none; letter-spacing: 0; cursor: pointer; padding: 2px 4px; border-radius: 5px; }
+  .link-btn:hover { background: rgba(142,168,255,.12); }
+
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
+              background: rgba(142,168,255,.14); color: #cfd9ff; }
+  .row .ico svg { width: 18px; height: 18px; }
+  .row .txt { flex: 1; min-width: 0; }
+  .row .title { font-weight: 500; }
+  .row .desc { color: var(--text-3); font-size: 12px; display: flex; align-items: center; gap: 6px;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .desc.live { color: var(--ok); }
+  .row .desc.bad { color: var(--warn); }
+  .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 10px; }
+  .eq i { width: 2px; background: currentColor; border-radius: 1px; animation: eq 1s ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .2s; } .eq i:nth-child(3) { animation-delay: .4s; }
+  @keyframes eq { 0%, 100% { height: 3px; } 50% { height: 10px; } }
+
+  .toggle { position: relative; width: 40px; height: 24px; flex: none; border: 0; border-radius: 999px;
+            background: rgba(255,255,255,.18); cursor: pointer; transition: background .25s; padding: 0; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+            border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.35);
+            transition: transform .25s cubic-bezier(.3, 1.3, .5, 1); }
+  .toggle[aria-checked="true"] { background: var(--switch-on); }
+  .toggle[aria-checked="true"]::after { transform: translateX(16px); }
+  .toggle:disabled { opacity: .4; cursor: not-allowed; }
+  .toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .checks { list-style: none; margin: 0; padding: 0; max-height: 210px; overflow-y: auto; }
+  .checks .group { font-size: 11px; font-weight: 600; color: var(--text-3); padding: 8px 0 2px; }
+  .checks .group:first-child { padding-top: 0; }
+  .check { display: grid; grid-template-columns: 14px 1fr; column-gap: 8px; align-items: baseline;
+           padding: 4px 0; }
+  .check .dot { transform: translateY(-1px); }
+  .check .label { font-weight: 500; }
+  .check .detail { grid-column: 2; color: var(--text-3); font-size: 11.5px; overflow: hidden;
+                   text-overflow: ellipsis; white-space: nowrap; user-select: text; -webkit-user-select: text; }
+  .check.error .detail { color: #ffb3c1; }
+  .check.warn .detail { color: #ffd99a; }
+  .check.muted .label { color: var(--text-3); font-weight: 400; }
+
+  /* --- agent injoignable / messages */
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10, 12, 30, .55);
+             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); opacity: 0; pointer-events: none;
+             transition: opacity .3s; z-index: 10; }
+  body.offline .overlay { opacity: 1; pointer-events: auto; }
+  .overlay .box { text-align: center; padding: 26px 32px; border-radius: 18px; background: rgba(30, 28, 60, .9);
+                  border: 1px solid var(--line); max-width: 380px; }
+  .overlay h2 { margin: 12px 0 4px; font-size: 15px; }
+  .overlay p { margin: 0; color: var(--text-2); }
+  .spinner { width: 26px; height: 26px; margin: 0 auto; border-radius: 50%; border: 2.5px solid rgba(255,255,255,.15);
+             border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0;
+           padding: 9px 16px; border-radius: 10px; background: rgba(40, 30, 60, .95); border: 1px solid rgba(255,95,126,.5);
+           color: #ffd1da; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 20; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 680px) {
+    .app { padding: 0 16px 16px; }
+    .stage { grid-template-columns: 1fr; }
+    .link { flex-direction: row; } .wire { width: 60px; }
+    .grid { grid-template-columns: 1fr; }
+    .top { padding-left: 0; }
+  }
+  body:not(.ready) *, body:not(.ready) *::before, body:not(.ready) *::after { transition: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-tower" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="21" y="5" width="38" height="70" rx="6"/>
+    <path d="M28 14h24M28 20h24"/>
+    <circle cx="40" cy="47" r="11"/>
+    <circle cx="40" cy="47" r="3.2"/>
+    <path d="M40 36v3M40 55v3M29 47h3M48 47h3"/>
+    <circle cx="51" cy="67" r="1.8" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-laptop" viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="12" y="15" width="56" height="38" rx="4"/>
+    <path d="M35 15.5h10"/>
+    <path d="M4 59h72l-3.5 5a3 3 0 0 1-2.5 1.3H10a3 3 0 0 1-2.5-1.3z"/>
+  </symbol>
+  <symbol id="i-kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2" y="6" width="20" height="12" rx="2.5"/>
+    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/>
+  </symbol>
+  <symbol id="i-mouse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6.5" y="3" width="11" height="18" rx="5.5"/>
+    <path d="M12 7v3"/>
+  </symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 15v-3a8 8 0 0 1 16 0v3"/>
+    <rect x="3" y="14" width="4.5" height="7" rx="1.8"/>
+    <rect x="16.5" y="14" width="4.5" height="7" rx="1.8"/>
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="3" width="6" height="11" rx="3"/>
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/>
+  </symbol>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>SetupDouble</div>
+    <div id="pill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span id="pill-text">Chargement…</span></div>
+  </header>
+
+  <section class="stage" aria-label="Machines">
+    <div class="machine" id="m-pc">
+      <span class="here" hidden>Cet ordinateur</span>
+      <svg class="device" aria-hidden="true"><use href="#i-tower"/></svg>
+      <div class="name">PC Windows</div>
+      <div class="sub"></div>
+      <div class="peripherals" aria-hidden="true">
+        <span class="chip"><svg><use href="#i-kbd"/></svg>Clavier</span>
+        <span class="chip"><svg><use href="#i-mouse"/></svg>Souris</span>
+      </div>
+    </div>
+
+    <div class="link" id="link">
+      <div class="wire"><i></i><i></i><i></i></div>
+      <div class="link-label" id="link-label"></div>
+    </div>
+
+    <div class="machine" id="m-mac">
+      <span class="here" hidden>Cet ordinateur</span>
+      <svg class="device" aria-hidden="true"><use href="#i-laptop"/></svg>
+      <div class="name">Mac</div>
+      <div class="sub"></div>
+      <div class="peripherals" aria-hidden="true">
+        <span class="chip"><svg><use href="#i-kbd"/></svg>Clavier</span>
+        <span class="chip"><svg><use href="#i-mouse"/></svg>Souris</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="switch">
+    <div class="seg" id="seg" role="radiogroup" aria-label="Clavier et souris" data-active="pc">
+      <div class="thumb"></div>
+      <button role="radio" data-target="pc" aria-checked="true"><svg><use href="#i-kbd"/></svg>Sur le PC</button>
+      <button role="radio" data-target="mac" aria-checked="false"><svg><use href="#i-kbd"/></svg>Sur le Mac</button>
+    </div>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h3>Audio</h3>
+      <div class="row">
+        <div class="ico"><svg><use href="#i-headphones"/></svg></div>
+        <div class="txt">
+          <div class="title">Son du Mac dans le casque</div>
+          <div class="desc" id="sound-desc"></div>
+        </div>
+        <button class="toggle" id="sound" role="switch" aria-checked="false" aria-label="Son du Mac dans le casque"></button>
+      </div>
+      <div class="row">
+        <div class="ico"><svg><use href="#i-mic"/></svg></div>
+        <div class="txt">
+          <div class="title">Micro de la Scarlett sur le Mac</div>
+          <div class="desc" id="mic-desc"></div>
+        </div>
+        <button class="toggle" id="mic" role="switch" aria-checked="false" aria-label="Micro de la Scarlett sur le Mac"></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Vérifications <button class="link-btn" id="open-log">Ouvrir le journal</button></h3>
+      <ul class="checks" id="checks"></ul>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" role="alertdialog" aria-label="Agent injoignable">
+  <div class="box">
+    <div class="spinner"></div>
+    <h2>SetupDouble ne répond pas</h2>
+    <p id="offline-text">L'agent est peut-être arrêté. Reconnexion automatique…</p>
+  </div>
+</div>
+<div class="toast" id="toast" role="alert"></div>
+
+<script>
+"use strict";
+const TOKEN = "{{TOKEN}}";
+const $ = (id) => document.getElementById(id);
+let state = null;
+let failures = 0;
+let pendingUntil = 0;  // évite qu'un ancien état écrase un clic tout juste fait
+
+if (!/SetupDouble/.test(navigator.userAgent)) document.body.classList.add("browser");
+
+async function api(path, body) {
+  const opts = { headers: { "X-SD-Token": TOKEN }, cache: "no-store" };
+  if (body !== undefined) {
+    opts.method = "POST";
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    // l'agent a redémarré avec un nouveau jeton : on recharge la page pour le récupérer
+    location.reload();
+    throw new Error("jeton expiré");
+  }
+  if (!res.ok && body === undefined) throw new Error(data.error || res.status);
+  return data;
+}
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+async function act(action, value) {
+  pendingUntil = Date.now() + 1200;
+  try {
+    const r = await api("/api/action", { action, value });
+    if (!r.ok) { toast(r.message || "Action impossible"); pendingUntil = 0; }
+  } catch (e) {
+    toast("SetupDouble ne répond pas");
+    pendingUntil = 0;
+  }
+  setTimeout(refresh, 250);
+}
+
+function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+
+function hotkeyHtml(hk) {
+  const frag = document.createDocumentFragment();
+  hk.split(" + ").forEach((k, i) => {
+    if (i) frag.append(" + ");
+    const kbd = document.createElement("kbd");
+    kbd.textContent = k;
+    frag.append(kbd);
+  });
+  return frag;
+}
+
+function render(s) {
+  const connected = s.link.state === "connected";
+  const peer = s.role === "pc" ? "mac" : "pc";
+
+  // machines
+  for (const key of ["pc", "mac"]) {
+    const m = s.machines[key];
+    const el = $("m-" + key);
+    el.classList.toggle("active", s.active === key);
+    el.classList.toggle("offline", key === peer && !connected);
+    el.querySelector(".here").hidden = !m.here;
+    setText(el.querySelector(".name"), m.name || (key === "pc" ? "PC Windows" : "Mac"));
+    let sub = "";
+    if (key === peer) sub = connected ? (m.ip || "") : "Hors ligne";
+    else sub = s.active === key ? "Utilise le clavier et la souris"
+                                : `Clavier et souris sur le ${s.active === "pc" ? "PC" : "Mac"}`;
+    setText(el.querySelector(".sub"), sub);
+  }
+
+  // lien réseau
+  const link = $("link");
+  link.classList.toggle("connected", connected);
+  link.classList.toggle("broken", !connected);
+  link.classList.toggle("flow", connected && s.active === "mac");
+  const label = $("link-label");
+  label.replaceChildren();
+  const b = document.createElement("b");
+  const titles = { connected: "Connecté", waiting: "En attente du Mac", searching: "Recherche du PC",
+                   connecting: "Connexion…", auth_failed: "Secret refusé", error: "PC injoignable" };
+  b.textContent = titles[s.link.state] || s.link.state;
+  label.append(b, connected && s.link.rtt_ms != null ? `${Math.max(1, Math.round(s.link.rtt_ms))} ms` : "");
+  label.title = s.link.detail || "";
+
+  // sélecteur
+  const seg = $("seg");
+  if (Date.now() > pendingUntil) seg.dataset.active = s.active;
+  for (const btn of seg.querySelectorAll("button")) {
+    btn.setAttribute("aria-checked", String(seg.dataset.active === btn.dataset.target));
+    btn.disabled = !connected && btn.dataset.target === "mac" && s.active !== "mac";
+  }
+  const hint = $("hint");
+  hint.replaceChildren();
+  if (!connected) {
+    hint.append(s.role === "pc" ? "Lance l'agent sur le Mac pour pouvoir basculer."
+                                 : (s.link.detail || "Recherche du PC…"));
+  } else if (s.hotkey) {
+    hint.append("Raccourci sur le clavier du PC : ", hotkeyHtml(s.hotkey));
+  } else {
+    hint.append("Clavier et souris branchés sur le PC");
+  }
+
+  renderAudio(s, connected);
+  renderChecks(s, connected);
+  renderPill(s, connected);
+}
+
+function renderAudio(s, connected) {
+  const a = s.audio;
+  const rows = [
+    ["sound", a.sound, a.sound_flow, "Le son du Mac arrive dans le casque", "Aucun son reçu : sortie du Mac sur BlackHole 2ch ?"],
+    ["mic", a.mic, a.mic_flow, "Le Mac reçoit le micro", "Aucun son reçu du micro"],
+  ];
+  for (const [id, on, flow, live, bad] of rows) {
+    const t = $(id);
+    if (Date.now() > pendingUntil) t.setAttribute("aria-checked", String(on));
+    t.disabled = !a.enabled;
+    const d = $(id + "-desc");
+    d.className = "desc";
+    d.replaceChildren();
+    if (!a.enabled) d.append("Audio désactivé dans config.toml");
+    else if (!on) d.append("Coupé");
+    else if (!connected) d.append("En attente de connexion");
+    else if (flow === true) {
+      d.classList.add("live");
+      const eq = document.createElement("span");
+      eq.className = "eq";
+      eq.innerHTML = "<i></i><i></i><i></i>";
+      d.append(eq, live);
+    } else if (flow === false) { d.classList.add("bad"); d.append(bad); }
+    else d.append("Activé");
+  }
+}
+
+function renderChecks(s, connected) {
+  const ul = $("checks");
+  const frag = document.createDocumentFragment();
+  const names = { pc: s.machines.pc.name || "PC Windows", mac: s.machines.mac.name || "Mac" };
+  const order = s.role === "pc" ? ["pc", "mac"] : ["mac", "pc"];
+  for (const machine of order) {
+    const g = document.createElement("li");
+    g.className = "group";
+    g.textContent = names[machine] + (s.machines[machine].here ? " · cet ordinateur" : "");
+    frag.append(g);
+    const items = s.checks.filter((c) => c.machine === machine);
+    if (!items.length) {
+      frag.append(checkItem({ state: "off", label: connected ? "Pas encore d'informations" : "Hors ligne", detail: "" }, true));
+    }
+    for (const c of items) frag.append(checkItem(c));
+  }
+  ul.replaceChildren(frag);
+}
+
+function checkItem(c, muted) {
+  const li = document.createElement("li");
+  li.className = "check " + c.state + (muted ? " muted" : "");
+  const dot = document.createElement("span");
+  dot.className = "dot " + c.state;
+  const label = document.createElement("span");
+  label.className = "label";
+  label.textContent = c.label;
+  li.append(dot, label);
+  if (c.detail) {
+    const d = document.createElement("span");
+    d.className = "detail";
+    d.textContent = c.detail;
+    d.title = c.detail;
+    li.append(d);
+  }
+  return li;
+}
+
+function renderPill(s, connected) {
+  const pill = $("pill");
+  let cls = "ok", text = "Tout est opérationnel";
+  const errors = s.checks.filter((c) => c.state === "error").length;
+  const warns = s.checks.filter((c) => c.state === "warn").length;
+  if (s.link.state === "auth_failed") { cls = "error"; text = "Secret refusé"; }
+  else if (!connected) { cls = "warn"; text = s.role === "pc" ? "Mac non connecté" : "PC non connecté"; }
+  else if (errors) { cls = "error"; text = errors > 1 ? `${errors} problèmes` : "1 problème"; }
+  else if (warns) { cls = "warn"; text = warns > 1 ? `${warns} avertissements` : "1 avertissement"; }
+  pill.className = "pill " + cls;
+  setText($("pill-text"), text);
+}
+
+async function refresh() {
+  try {
+    state = await api("/api/status");
+    failures = 0;
+    document.body.classList.remove("offline");
+    render(state);
+    if (!document.body.classList.contains("ready")) {
+      requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add("ready")));
+    }
+  } catch (e) {
+    if (++failures >= 2) document.body.classList.add("offline");
+  }
+}
+
+$("seg").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn || btn.disabled || !state) return;
+  const target = btn.dataset.target;
+  if (target === state.active) return;
+  $("seg").dataset.active = target;
+  for (const b of $("seg").querySelectorAll("button")) b.setAttribute("aria-checked", String(b === btn));
+  act(target);
+});
+for (const id of ["sound", "mic"]) {
+  $(id).addEventListener("click", () => {
+    const t = $(id);
+    const next = t.getAttribute("aria-checked") !== "true";
+    t.setAttribute("aria-checked", String(next));
+    act(id, next);
+  });
+}
+$("open-log").addEventListener("click", () => act("open_log"));
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

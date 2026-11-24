@@ -7,6 +7,7 @@ injectés de l'extérieur.
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import socket
@@ -15,7 +16,10 @@ import threading
 import time
 from typing import Callable, Protocol
 
+from . import __version__
 from . import protocol as P
+from .dashboard import check
+from .hotkeys import pretty
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +45,11 @@ class Session:
         self.audio_port = audio_port
         self.writer = P.FrameWriter(sock)
         self.last_rx = time.monotonic()
+        self.since = time.time()
+        self.ping_sent = 0.0
+        self.rtt_ms: float | None = None
+        self.peer_info: dict = {}
+        self.info_sent: str | None = None
         self.closed = False
 
     def send(self, data: bytes) -> None:
@@ -73,6 +82,13 @@ class Server:
         self.sound_on = bool(self.acfg["mac_sound"])
         self.mic_on = bool(self.acfg["mic"])
         self.audio_status = "désactivé"
+        self.sound_device = ""  # nom du périphérique ouvert, pour l'interface
+        self.mic_device = ""
+        self.sound_error = ""
+        self.mic_error = ""
+        self.hotkey_text = self.scfg["hotkey_toggle"] or self.scfg["hotkey_mac"]
+        self.hotkey_check: Callable[[], dict] | None = None  # fourni par server_win
+        self.open_log: Callable[[], None] | None = None
         self.listeners: list[Callable[[], None]] = []
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -145,6 +161,83 @@ class Server:
         where = "Mac actif" if self.remote else "PC actif"
         return f"{where} · {s.name} ({s.addr[0]})"
 
+    def local_checks(self) -> list[dict]:
+        checks = []
+        if self.hotkey_check is not None:
+            checks.append(self.hotkey_check())
+        if not self.acfg["enabled"]:
+            checks.append(check("pc_audio", "Audio", "off", "Désactivé dans config.toml"))
+            return checks
+        checks.append(check("pc_out", "Casque (sortie Scarlett)",
+                            "ok" if self._sound_rx is not None else "error",
+                            self.sound_device or self.sound_error or "Démarrage…"))
+        checks.append(check("pc_in", "Micro (entrée Scarlett)",
+                            "ok" if self._mic_tx is not None else "error",
+                            self.mic_device or self.mic_error or "Démarrage…"))
+        return checks
+
+    def _sound_flowing(self) -> bool:
+        from .audio import flowing
+        rx = self._sound_rx
+        return rx is not None and flowing(rx.last_packet)
+
+    def info(self) -> dict:
+        """Ce que le Mac a besoin de savoir pour son interface."""
+        return {"os": "windows", "name": self.name, "hotkey": pretty(self.hotkey_text),
+                "checks": self.local_checks(), "flows": {"sound_rx": self._sound_flowing()}}
+
+    def status(self) -> dict:
+        """État complet pour le tableau de bord (voir dashboard.py)."""
+        s = self.session
+        peer = s.peer_info if s else {}
+        if s is not None:
+            rtt = f" · {s.rtt_ms:.0f} ms" if s.rtt_ms is not None else ""
+            link = {"state": "connected", "detail": f"{s.name} ({s.addr[0]}){rtt}",
+                    "rtt_ms": s.rtt_ms, "since": s.since}
+        else:
+            link = {"state": "waiting", "detail": "En attente du Mac sur le réseau…",
+                    "rtt_ms": None, "since": None}
+        checks = [dict(c, machine="pc") for c in self.local_checks()]
+        checks += [dict(c, machine="mac") for c in peer.get("checks", [])]
+        return {
+            "role": "pc",
+            "version": __version__,
+            "machines": {
+                "pc": {"name": self.name, "ip": None, "here": True},
+                "mac": {"name": s.name if s else "Mac", "ip": s.addr[0] if s else None,
+                        "here": False},
+            },
+            "link": link,
+            "active": "mac" if self.remote else "pc",
+            "hotkey": pretty(self.hotkey_text),
+            "audio": {
+                "enabled": bool(self.acfg["enabled"]),
+                "sound": self.sound_on, "mic": self.mic_on,
+                "sound_flow": self._sound_flowing() if s else None,
+                "mic_flow": peer.get("flows", {}).get("mic_rx") if s else None,
+            },
+            "checks": checks,
+            "peer_reported": bool(peer),
+        }
+
+    def action(self, name: str, value=None) -> tuple[bool, str]:
+        """Actions déclenchées depuis le tableau de bord."""
+        if name in ("mac", "toggle") and self.session is None \
+                and (name == "mac" or not self.remote):
+            return False, "Le Mac n'est pas connecté."
+        if name in ("mac", "pc", "toggle"):
+            self.on_hotkey(name)
+            return True, ""
+        if name in ("sound", "mic"):
+            if not self.acfg["enabled"]:
+                return False, "L'audio est désactivé dans config.toml."
+            (self.set_sound if name == "sound" else self.set_mic)(bool(value))
+            return True, ""
+        if name == "open_log" and self.open_log is not None:
+            self.open_log()
+            return True, ""
+        return False, f"Action inconnue : {name}"
+
     # --- Entrées venant de la capture (thread win-input) -------------------------
 
     def sink(self, event: tuple) -> None:
@@ -193,8 +286,10 @@ class Server:
                 gain=float(a["mac_sound_gain"]))
             self._sound_rx.enabled = self.sound_on
             self._sound_rx.start()
+            self.sound_device = audio.device_name(out_dev)
         except Exception as exc:
             self._sound_rx = None
+            self.sound_error = str(exc)
             errors.append(f"sortie : {exc}")
         try:
             ch = int(a["mic_channel"])
@@ -206,8 +301,10 @@ class Server:
                 gain=float(a["mic_gain"]))
             self._mic_tx.enabled = self.mic_on
             self._mic_tx.start()
+            self.mic_device = f"{audio.device_name(in_dev)} · entrée {ch}"
         except Exception as exc:
             self._mic_tx = None
+            self.mic_error = str(exc)
             errors.append(f"micro : {exc}")
         stop = self._stop
         if self._sound_rx is not None:
@@ -283,6 +380,7 @@ class Server:
         try:
             session.send(P.encode(P.AUTH_OK, struct.pack(">H", int(self.scfg["audio_port"]))))
             session.send(P.encode(P.AUDIO_CTRL, bytes([self._audio_flags()])))
+            self._send_info(session, force=True)
         except OSError:
             self._drop(session)
             return
@@ -306,10 +404,37 @@ class Server:
                         self.clipboard.set_text(text)
                 elif msg_type == P.PING:
                     session.send(P.encode(P.PONG))
+                elif msg_type == P.PONG:
+                    if session.ping_sent:
+                        session.rtt_ms = (time.monotonic() - session.ping_sent) * 1000
+                elif msg_type == P.INFO:
+                    try:
+                        info = json.loads(payload.decode("utf-8"))
+                    except ValueError:
+                        continue
+                    if isinstance(info, dict):
+                        session.peer_info = info
+                        self._changed()
+                elif msg_type == P.REQ_MODE:
+                    self.on_hotkey("mac" if payload[:1] == b"\x01" else "pc")
+                elif msg_type == P.REQ_AUDIO:
+                    flags = payload[0] if payload else 0
+                    if self.acfg["enabled"]:
+                        if bool(flags & P.AUDIO_SOUND_ON) != self.sound_on:
+                            self.set_sound(not self.sound_on)
+                        if bool(flags & P.AUDIO_MIC_ON) != self.mic_on:
+                            self.set_mic(not self.mic_on)
+                        self._send_audio_ctrl()  # confirme l'état réel au Mac
         except (OSError, ConnectionError):
             pass
         finally:
             self._drop(session)
+
+    def _send_info(self, session: Session, force: bool = False) -> None:
+        data = json.dumps(self.info(), ensure_ascii=False)
+        if force or data != session.info_sent:
+            session.info_sent = data
+            self.events.put(("raw", P.enc_text(P.INFO, data)))
 
     def _drop(self, session: Session) -> None:
         session.close()
@@ -389,7 +514,9 @@ class Server:
                 log.warning("Le Mac ne répond plus")
                 self._drop(s)
                 continue
+            s.ping_sent = time.monotonic()
             self.events.put(("raw", P.encode(P.PING)))
+            self._send_info(s)
 
     def _beacon_loop(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

@@ -9,11 +9,13 @@ import argparse
 import ctypes
 import logging
 import os
+import subprocess
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from . import config as config_mod
+from . import dashboard
 from . import hotkeys as hotkeys_mod
 from . import win_clipboard, win_input
 from .server_core import Server
@@ -79,10 +81,32 @@ def make_icon(remote: bool, connected: bool):
     return img
 
 
+def open_dashboard(config_path: str | None = None) -> None:
+    """Ouvre la fenêtre du tableau de bord dans un processus séparé."""
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    cmd = [str(pythonw if pythonw.exists() else exe), "-m", "setupdouble.app"]
+    if config_path:
+        cmd += ["--config", config_path]
+    subprocess.Popen(cmd, cwd=str(config_mod.ROOT),
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def hotkey_check(capture: win_input.InputCapture, hotkeys) -> dict:
+    text = ", ".join(hotkeys_mod.pretty(h.text) for h in hotkeys)
+    if capture._fallback_kb_hook:
+        return dashboard.check("hotkey", "Raccourci clavier", "warn",
+                               f"{text} : déjà pris par une autre appli, mode de secours")
+    return dashboard.check("hotkey", "Raccourci clavier", "ok", text)
+
+
 def run_tray(server: Server, capture: win_input.InputCapture, log_path: Path,
              hotkey_text: str) -> None:
     import pystray
     from pystray import Menu, MenuItem as Item
+
+    def show_dashboard(icon, item):
+        open_dashboard(server.cfg.get("_path"))
 
     def toggle(icon, item):
         server.request_mode(not server.remote)
@@ -109,6 +133,7 @@ def run_tray(server: Server, capture: win_input.InputCapture, log_path: Path,
 
     menu = Menu(
         Item(lambda i: server.status_text(), None, enabled=False),
+        Item("Ouvrir SetupDouble…", show_dashboard),
         Item(f"Basculer ({hotkey_text})", toggle, default=True, visible=False),
         Menu.SEPARATOR,
         Item("Contrôler le Mac", to_mac, checked=lambda i: server.remote, radio=True,
@@ -173,8 +198,11 @@ def main(argv: list[str] | None = None) -> int:
     server = Server(cfg, clipboard=Clip())
     capture = win_input.InputCapture(hotkeys, server.on_hotkey, server.sink, server.on_mode)
     server.input = capture
+    server.hotkey_check = lambda: hotkey_check(capture, hotkeys)
+    server.open_log = lambda: os.startfile(log_path)  # type: ignore[attr-defined]
     capture.start()
     server.start()
+    dashboard.start(server, int(s["ui_port"]))
     log.info("SetupDouble prêt – raccourci : %s", ", ".join(h.text for h in hotkeys))
 
     if args.no_tray:

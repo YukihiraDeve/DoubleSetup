@@ -7,6 +7,7 @@
 #   2. crée l'environnement Python (.venv) et installe les dépendances
 #   3. crée config.toml avec le secret du PC
 #   4. installe un LaunchAgent : l'agent démarre à l'ouverture de session
+#   5. crée l'app « SetupDouble » (fenêtre de statut) dans ~/Applications
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,20 +28,20 @@ done
 command -v brew >/dev/null || { echo "Homebrew est requis : https://brew.sh"; exit 1; }
 
 if [[ $AUDIO == 1 ]]; then
-  echo "== 1/4 Pilotes audio virtuels (mot de passe administrateur demandé par macOS)"
+  echo "== 1/5 Pilotes audio virtuels (mot de passe administrateur demandé par macOS)"
   brew list --cask blackhole-2ch >/dev/null 2>&1 || brew install --cask blackhole-2ch
   brew list --cask blackhole-16ch >/dev/null 2>&1 || brew install --cask blackhole-16ch
   brew list switchaudio-osx >/dev/null 2>&1 || brew install switchaudio-osx
 else
-  echo "== 1/4 Audio ignoré (--no-audio)"
+  echo "== 1/5 Audio ignoré (--no-audio)"
 fi
 
-echo "== 2/4 Environnement Python"
+echo "== 2/5 Environnement Python"
 if ! command -v uv >/dev/null; then brew install uv; fi
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -r requirements-mac.txt
 
-echo "== 3/4 Configuration"
+echo "== 3/5 Configuration"
 if [[ ! -f config.toml ]]; then
   if [[ -z "$SECRET" ]]; then
     read -r -p "Colle le secret affiché par l'installation Windows : " SECRET
@@ -61,7 +62,7 @@ PLIST="$HOME/Library/LaunchAgents/com.setupdouble.agent.plist"
 LOGDIR="$HOME/Library/Logs/SetupDouble"
 mkdir -p "$LOGDIR" "$HOME/Library/LaunchAgents"
 
-echo "== 4/4 Démarrage automatique"
+echo "== 4/5 Démarrage automatique"
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 if [[ $AUTOSTART == 1 ]]; then
   cat > "$PLIST" <<EOF
@@ -96,6 +97,9 @@ else
   echo "Lancement manuel :  .venv/bin/python -m setupdouble.client_mac"
 fi
 
+echo "== 5/5 Application SetupDouble (fenêtre de statut)"
+.venv/bin/python -m setupdouble.mac_bundle --dest "$HOME/Applications"
+
 cat <<EOF
 
 =====================================================================
@@ -112,6 +116,8 @@ Puis redémarre l'agent :
 Conseil clavier : ajoute la disposition « Français – PC » dans
 Réglages Système → Clavier → Méthodes de saisie, pour que AltGr, @, #, {…}
 tombent exactement comme sur Windows.
+
+Fenêtre de statut : ouvre « SetupDouble » (Spotlight, Launchpad ou ~/Applications).
 
 Journal : ${LOGDIR}/client.log
 =====================================================================

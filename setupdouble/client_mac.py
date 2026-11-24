@@ -6,24 +6,31 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from . import __version__
 from . import config as config_mod
+from . import dashboard
 from . import protocol as P
+from .dashboard import check
 
 log = logging.getLogger("setupdouble")
 
 LOG_DIR = Path.home() / "Library" / "Logs" / "SetupDouble"
 DEAD_AFTER = 10.0
 CLIP_LIMIT = 60_000
+KEEPALIVE = 2.0
+DEVICE_CACHE_S = 5.0
 
 
 class AuthError(Exception):
@@ -104,6 +111,20 @@ class Client:
         self._sound_tx = None
         self._mic_rx = None
         self._udp_stop: threading.Event | None = None
+        # --- état lisible par le tableau de bord
+        self.link_state = "searching"  # searching, connecting, connected, auth_failed, error
+        self.link_detail = ""
+        self.server_ip: str | None = None
+        self.since: float | None = None
+        self.rtt_ms: float | None = None
+        self.peer_info: dict = {}
+        self.audio_flags: int | None = None  # dernier AUDIO_CTRL reçu
+        self.accessibility = None  # callable -> bool, None = mode test
+        self.dry_run = False
+        self._ping_sent = 0.0
+        self._info_sent: str | None = None
+        self._session_stop: threading.Event | None = None
+        self._devices: tuple[float, dict] = (0.0, {})
 
     # --- boucle principale --------------------------------------------------------
 
@@ -113,17 +134,26 @@ class Client:
             target = self._target()
             if target is None:
                 log.info("Recherche du PC sur le réseau…")
+                if self.link_state != "auth_failed":
+                    self.link_state, self.link_detail = "searching", "Recherche du PC sur le réseau…"
                 self._stop.wait(1.0)
                 continue
             host, port = target
+            self.server_ip = host
+            if self.link_state not in ("auth_failed", "error"):
+                self.link_state, self.link_detail = "connecting", f"Connexion à {host}…"
             try:
                 self.session(host, port)
                 delay = 1.0
+                self.link_state, self.link_detail = "searching", "Connexion perdue, reconnexion…"
             except AuthError:
                 log.error("Secret refusé par le PC : vérifie 'secret' dans les deux config.toml")
+                self.link_state = "auth_failed"
+                self.link_detail = "Le PC refuse le secret : il doit être identique dans les deux config.toml"
                 delay = 15.0
             except (OSError, ConnectionError) as exc:
                 log.info("Connexion à %s:%s impossible ou perdue : %s", host, port, exc)
+                self.link_state, self.link_detail = "error", f"PC injoignable ({host}) : {exc}"
                 delay = min(delay * 1.5, 5.0)
             self._stop.wait(delay)
 
@@ -150,6 +180,7 @@ class Client:
         sock = socket.create_connection((host, port), timeout=5)
         P.tune_tcp(sock)
         self._sock = sock
+        self.server_ip = host
         try:
             msg_type, payload = P.read_frame(sock)
             if msg_type != P.HELLO or len(payload) < 18:
@@ -169,9 +200,14 @@ class Client:
             (server_audio_port,) = struct.unpack(">H", payload[:2])
             self._writer = P.FrameWriter(sock)
             self.connected_to = server_name
+            self.link_state, self.link_detail = "connected", f"{server_name} ({host})"
+            self.since = time.time()
             log.info("Connecté à %s (%s)", server_name, host)
             if self.use_audio:
                 self._start_audio(host, server_audio_port)
+            self._session_stop = threading.Event()
+            threading.Thread(target=self._keepalive, args=(self._session_stop,),
+                             name="keepalive", daemon=True).start()
             sock.settimeout(DEAD_AFTER)
             try:
                 self._loop(sock)
@@ -212,9 +248,37 @@ class Client:
                     self.clipboard.set_text(text)
                     self._clip_last = text
             elif msg_type == P.AUDIO_CTRL:
-                self._apply_audio_flags(payload[0] if payload else 0)
+                self.audio_flags = payload[0] if payload else 0
+                self._apply_audio_flags(self.audio_flags)
             elif msg_type == P.PING:
                 self._send(P.encode(P.PONG))
+            elif msg_type == P.PONG:
+                if self._ping_sent:
+                    self.rtt_ms = (time.monotonic() - self._ping_sent) * 1000
+            elif msg_type == P.INFO:
+                try:
+                    info = json.loads(payload.decode("utf-8"))
+                except ValueError:
+                    continue
+                if isinstance(info, dict):
+                    self.peer_info = info
+
+    def _keepalive(self, stop: threading.Event) -> None:
+        """Mesure la latence et tient le PC au courant de l'état du Mac."""
+        try:
+            self._send_info()
+            while not stop.wait(KEEPALIVE):
+                self._ping_sent = time.monotonic()
+                self._send(P.encode(P.PING))
+                self._send_info()
+        except OSError:
+            return
+
+    def _send_info(self) -> None:
+        data = json.dumps(self.info(), ensure_ascii=False)
+        if data != self._info_sent:
+            self._info_sent = data
+            self._send(P.enc_text(P.INFO, data))
 
     def _send(self, data: bytes) -> None:
         if self._writer is not None:
@@ -229,6 +293,14 @@ class Client:
             self._send(P.enc_text(P.CLIPBOARD, text, CLIP_LIMIT))
 
     def _end_session(self) -> None:
+        if self._session_stop is not None:
+            self._session_stop.set()
+            self._session_stop = None
+        self.rtt_ms = None
+        self.since = None
+        self.peer_info = {}
+        self.audio_flags = None
+        self._info_sent = None
         if self.active:
             self.active = False
         try:
@@ -248,6 +320,126 @@ class Client:
         if self.connected_to:
             log.info("Déconnecté de %s", self.connected_to)
         self.connected_to = None
+
+    # --- tableau de bord ------------------------------------------------------------------
+
+    def _device_presence(self) -> dict:
+        """Les BlackHole sont-ils installés ? (mis en cache quelques secondes)"""
+        stamp, cached = self._devices
+        if time.monotonic() - stamp < DEVICE_CACHE_S:
+            return cached
+        result = {}
+        try:
+            from . import audio
+            for key, name, kind in (("capture", self.acfg["mac_capture_device"], "input"),
+                                    ("mic", self.acfg["mac_mic_device"], "output")):
+                try:
+                    audio.find_device(name, kind)
+                    result[key] = True
+                except Exception:
+                    result[key] = False
+        except Exception:  # sounddevice absent
+            result = {"capture": False, "mic": False}
+        self._devices = (time.monotonic(), result)
+        return result
+
+    def local_checks(self) -> list[dict]:
+        checks = []
+        if self.accessibility is None:
+            checks.append(check("accessibility", "Accessibilité", "warn",
+                                "Mode test (--dry-run) : rien n'est injecté"))
+        elif self.accessibility():
+            checks.append(check("accessibility", "Accessibilité", "ok", "Autorisée"))
+        else:
+            checks.append(check("accessibility", "Accessibilité", "error",
+                                "À autoriser : Réglages Système → Confidentialité et sécurité "
+                                "→ Accessibilité → " + os.path.realpath(sys.executable)))
+        if not self.use_audio:
+            checks.append(check("mac_audio", "Audio", "off", "Désactivé"))
+            return checks
+        dev = self._device_presence()
+        cap, mic = self.acfg["mac_capture_device"], self.acfg["mac_mic_device"]
+        checks.append(check("mac_capture", "Capture du son", "ok" if dev["capture"] else "error",
+                            cap if dev["capture"]
+                            else f"{cap} introuvable : ./scripts/install_mac.sh"))
+        checks.append(check("mac_mic", "Micro virtuel", "ok" if dev["mic"] else "error",
+                            mic if dev["mic"] else f"{mic} introuvable : ./scripts/install_mac.sh"))
+        if self.router is not None:
+            if self.router.tool is None:
+                checks.append(check("mac_route", "Routage audio", "warn",
+                                    "SwitchAudioSource absent : choisis BlackHole à la main"))
+            else:
+                checks.append(check("mac_route", "Routage audio", "ok", "Automatique"))
+        return checks
+
+    def _mic_flowing(self) -> bool:
+        from .audio import flowing
+        rx = self._mic_rx
+        return rx is not None and rx.enabled and flowing(rx.last_packet)
+
+    def info(self) -> dict:
+        return {"os": "mac", "name": self.name, "checks": self.local_checks(),
+                "flows": {"mic_rx": self._mic_flowing()}}
+
+    def status(self) -> dict:
+        connected = self.link_state == "connected"
+        peer = self.peer_info
+        if connected and self.rtt_ms is not None:
+            detail = f"{self.link_detail} · {self.rtt_ms:.0f} ms"
+        else:
+            detail = self.link_detail
+        flags = self.audio_flags
+        if flags is None:
+            sound, mic = bool(self.acfg["mac_sound"]), bool(self.acfg["mic"])
+        else:
+            sound, mic = bool(flags & P.AUDIO_SOUND_ON), bool(flags & P.AUDIO_MIC_ON)
+        checks = [dict(c, machine="pc") for c in peer.get("checks", [])] if connected else []
+        checks += [dict(c, machine="mac") for c in self.local_checks()]
+        return {
+            "role": "mac",
+            "version": __version__,
+            "machines": {
+                "pc": {"name": peer.get("name") or self.connected_to or "PC Windows",
+                       "ip": self.server_ip, "here": False},
+                "mac": {"name": self.name, "ip": None, "here": True},
+            },
+            "link": {"state": self.link_state, "detail": detail, "rtt_ms": self.rtt_ms,
+                     "since": self.since},
+            "active": "mac" if self.active else "pc",
+            "hotkey": peer.get("hotkey", ""),
+            "audio": {
+                "enabled": self.use_audio,
+                "sound": sound, "mic": mic,
+                "sound_flow": peer.get("flows", {}).get("sound_rx") if connected else None,
+                "mic_flow": self._mic_flowing() if connected else None,
+            },
+            "checks": checks,
+            "peer_reported": bool(peer),
+        }
+
+    def action(self, name: str, value=None) -> tuple[bool, str]:
+        if name == "open_log":
+            subprocess.Popen(["open", str(LOG_DIR / "client.log")])
+            return True, ""
+        if self.link_state != "connected" or self._writer is None:
+            return False, "Le Mac n'est pas connecté au PC."
+        try:
+            if name in ("mac", "pc", "toggle"):
+                remote = name == "mac" or (name == "toggle" and not self.active)
+                self._send(P.encode(P.REQ_MODE, bytes([1 if remote else 0])))
+                return True, ""
+            if name in ("sound", "mic"):
+                if not self.use_audio:
+                    return False, "L'audio est désactivé sur le Mac."
+                st = self.status()["audio"]
+                sound = bool(value) if name == "sound" else st["sound"]
+                mic = bool(value) if name == "mic" else st["mic"]
+                flags = (P.AUDIO_SOUND_ON if sound else 0) | (P.AUDIO_MIC_ON if mic else 0)
+                self._send(P.encode(P.REQ_AUDIO, bytes([flags])))
+                return True, ""
+        except OSError as exc:
+            return False, f"Envoi impossible : {exc}"
+        return False, f"Action inconnue : {name}"
 
     # --- audio ------------------------------------------------------------------------
 
@@ -359,6 +551,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from .mac_system import AudioRouter, MacClipboard
 
+    accessibility = None
     if args.dry_run:
         injector = RecordingInjector()
         router = None
@@ -371,6 +564,7 @@ def main(argv: list[str] | None = None) -> int:
         injector = MacInjector(keymap.KeyMapper(c["modifier_layout"], c["swap_iso_keys"]),
                                float(c["mouse_speed"]), float(c["scroll_speed"]),
                                bool(c["invert_scroll"]))
+        accessibility = accessibility_granted
         if not accessibility_granted():
             log.error(
                 "Accessibilité non autorisée : le Mac ne pourra pas recevoir clavier et souris.\n"
@@ -383,6 +577,9 @@ def main(argv: list[str] | None = None) -> int:
 
     client = Client(cfg, injector, clipboard=clipboard, use_audio=not args.no_audio,
                     router=router)
+    client.accessibility = accessibility
+    client.dry_run = args.dry_run
+    dashboard.start(client, int(cfg["client"]["ui_port"]))
     try:
         client.run_forever()
     except KeyboardInterrupt:

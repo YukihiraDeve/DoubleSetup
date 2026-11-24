@@ -23,6 +23,7 @@ hotkey_pc = ""                      # facultatif : revenir directement au PC (ex
 
 clipboard = true              # partage du texte copié au moment de la bascule
 name = ""                     # nom affiché (défaut : nom du PC)
+ui_port = 47810               # fenêtre de statut (locale uniquement), 0 = désactivée
 
 [client]   # ----- Mac
 server = ""                   # IP du PC ; vide = découverte automatique
@@ -38,6 +39,7 @@ scroll_speed = 3.0            # lignes par cran de molette
 invert_scroll = false
 clipboard = true
 name = ""
+ui_port = 47811               # fenêtre de statut (locale uniquement), 0 = désactivée
 
 [audio]
 enabled = true

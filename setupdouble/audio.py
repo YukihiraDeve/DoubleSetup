@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import socket
 import threading
+import time
 from typing import Callable
 
 import numpy as np
@@ -157,6 +158,7 @@ class AudioSender:
         self.out_channels = out_channels or (1 if select_channel is not None else channels)
         self.dest: tuple[str, int] | None = None
         self.enabled = True
+        self.last_sent = 0.0  # time.monotonic() du dernier paquet envoyé
         self._seq = 0
         self._stream = None
 
@@ -170,6 +172,7 @@ class AudioSender:
         try:
             self.sock.sendto(protocol.enc_audio(self.stream_id, self._seq, data.tobytes()),
                              self.dest)
+            self.last_sent = time.monotonic()
         except OSError:
             pass
         self._seq += 1
@@ -207,6 +210,7 @@ class AudioReceiver:
         self.buffer = JitterBuffer(in_channels, sample_rate, latency_ms)
         self.enabled = True
         self.allowed_ip: str | None = None
+        self.last_packet = 0.0  # time.monotonic() du dernier paquet accepté
         self._last_seq: int | None = None
         self._stream = None
 
@@ -226,6 +230,7 @@ class AudioReceiver:
             if delta == 0 or delta > 0x7FFFFFFF:
                 return  # doublon ou paquet en retard
         self._last_seq = seq
+        self.last_packet = time.monotonic()
         frames = np.frombuffer(pcm, dtype=np.int16).reshape(-1, self.in_channels)
         self.buffer.push(apply_gain(frames, self.gain))
 
@@ -282,6 +287,17 @@ def udp_listener(sock: socket.socket, handler: Callable[[bytes, tuple], None],
     t = threading.Thread(target=run, name="udp-audio", daemon=True)
     t.start()
     return t
+
+
+def flowing(timestamp: float, within: float = 1.5) -> bool:
+    """Vrai si un paquet audio est passé il y a moins de ``within`` secondes."""
+    return timestamp > 0 and time.monotonic() - timestamp < within
+
+
+def device_name(device: int) -> str:
+    import sounddevice as sd
+
+    return str(sd.query_devices(device)["name"])
 
 
 def device_channels(device: int, kind: str, wanted: int) -> int:

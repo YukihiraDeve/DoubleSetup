@@ -8,6 +8,7 @@
 #   3. ouvre les ports dans le pare-feu (réseau privé uniquement)
 #   4. lance SetupDouble à l'ouverture de session (droits élevés, pour que
 #      le raccourci marche aussi quand une appli admin est au premier plan)
+#   5. ajoute « SetupDouble » au menu Démarrer (fenêtre de statut)
 
 param(
     [switch]$NoAutostart
@@ -24,7 +25,7 @@ if (-not $isAdmin) {
     exit 1
 }
 
-Write-Host "== 1/4 Environnement Python" -ForegroundColor Cyan
+Write-Host "== 1/5 Environnement Python" -ForegroundColor Cyan
 $venvPy = Join-Path $Root ".venv\Scripts\python.exe"
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     uv venv --python 3.12 .venv
@@ -40,7 +41,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     & $venvPy -m pip install -r requirements-win.txt
 }
 
-Write-Host "== 2/4 Configuration" -ForegroundColor Cyan
+Write-Host "== 2/5 Configuration" -ForegroundColor Cyan
 $cfg = Join-Path $Root "config.toml"
 if (-not (Test-Path $cfg)) {
     $bytes = New-Object byte[] 24
@@ -55,7 +56,7 @@ if (-not (Test-Path $cfg)) {
     Write-Host "config.toml existe déjà, conservé."
 }
 
-Write-Host "== 3/4 Pare-feu (réseau privé)" -ForegroundColor Cyan
+Write-Host "== 3/5 Pare-feu (réseau privé)" -ForegroundColor Cyan
 Get-NetFirewallRule -DisplayName "SetupDouble*" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName "SetupDouble contrôle (TCP 47801)" -Direction Inbound `
     -Protocol TCP -LocalPort 47801 -Action Allow -Profile Private | Out-Null
@@ -67,7 +68,7 @@ if ($netCategory -ne "Private") {
     Write-Host "Paramètres > Réseau et Internet > (ta connexion) > Type de profil réseau." -ForegroundColor Yellow
 }
 
-Write-Host "== 4/4 Démarrage automatique" -ForegroundColor Cyan
+Write-Host "== 4/5 Démarrage automatique" -ForegroundColor Cyan
 $pythonw = Join-Path $Root ".venv\Scripts\pythonw.exe"
 $taskName = "SetupDouble"
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
@@ -85,6 +86,17 @@ if (-not $NoAutostart) {
 } else {
     Write-Host "Lancement manuel :  .venv\Scripts\pythonw.exe -m setupdouble.server_win"
 }
+
+Write-Host "== 5/5 Raccourci dans le menu Démarrer" -ForegroundColor Cyan
+$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+$shell = New-Object -ComObject WScript.Shell
+$lnk = $shell.CreateShortcut((Join-Path $startMenu "SetupDouble.lnk"))
+$lnk.TargetPath = $pythonw
+$lnk.Arguments = "-m setupdouble.app"
+$lnk.WorkingDirectory = $Root
+$lnk.Description = "Statut de SetupDouble (clavier, souris, audio)"
+$lnk.Save()
+Write-Host "Fenêtre de statut : menu Démarrer > SetupDouble, ou clic droit sur l'icône > Ouvrir SetupDouble."
 
 Write-Host ""
 Write-Host "Périphériques audio détectés (vérifie que la Scarlett apparaît) :" -ForegroundColor Cyan

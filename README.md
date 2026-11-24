@@ -8,6 +8,7 @@ pour piloter le **MacBook**, par le réseau local, sans rien débrancher.
 - Le **micro de la Scarlett** est disponible sur le Mac (Discord, Meet, Zoom…).
 - Le **presse-papiers texte** suit la bascule : tu copies sur une machine, tu colles sur l'autre.
 - En mode PC, **rien n'intercepte le clavier ni la souris** : aucune latence ajoutée en jeu.
+- Une **fenêtre de statut**, sur le Mac comme sur le PC, montre où sont le clavier et la souris et si tout fonctionne.
 
 ```
  PC Windows (serveur)                             MacBook (agent)
@@ -85,6 +86,27 @@ Raccourcis clavier côté Mac, avec `modifier_layout = "pc"` (défaut) :
 
 Avec `modifier_layout = "mac"`, tu retrouves la disposition Apple : Windows = Cmd, Ctrl = Ctrl.
 
+## Fenêtre de statut
+
+Elle montre en un coup d'œil :
+- quelle machine utilise le clavier et la souris, avec un bouton pour basculer ;
+- si le PC et le Mac sont connectés, et la latence entre eux ;
+- si le son du Mac arrive bien dans le casque et si le micro arrive sur le Mac, avec un interrupteur pour chacun ;
+- la liste des vérifications des deux machines (Accessibilité, BlackHole, Scarlett, raccourci). La pastille en haut passe au orange ou au rouge dès qu'un point bloque.
+
+Pour l'ouvrir :
+- **Mac** : l'app **SetupDouble** dans `~/Applications`, aussi accessible par Spotlight ou le Launchpad ;
+- **PC** : menu Démarrer → **SetupDouble**, ou clic droit sur l'icône → *Ouvrir SetupDouble…*
+
+La page est servie en local uniquement, sur `127.0.0.1:47811` côté Mac et `127.0.0.1:47810` côté PC. Elle est protégée par un jeton, donc un site web ne peut pas piloter la bascule.
+
+Pour voir l'interface sans rien installer, lance la démo : elle simule un PC et un Mac connectés.
+
+```bash
+.venv/bin/python -m setupdouble.demo            # puis http://127.0.0.1:47821/ (vue Mac) ou :47820 (vue PC)
+.venv/bin/python -m setupdouble.demo --window   # dans la fenêtre native macOS
+```
+
 ## Configuration
 
 Tout se règle dans `config.toml`, avec le même format sur les deux machines (voir
@@ -145,6 +167,7 @@ Les tests couvrent :
 - le tampon audio, y compris la compensation de dérive d'horloge ;
 - un aller-retour audio UDP ;
 - une intégration serveur ⇄ agent complète sur 127.0.0.1 ;
+- le tableau de bord (état, bascule depuis le PC ou le Mac, refus sans jeton) ;
 - la logique des hooks Windows, avec une `user32` simulée.
 
 | Fichier | Rôle |
@@ -158,3 +181,7 @@ Les tests couvrent :
 | `setupdouble/mac_system.py` | presse-papiers et routage audio du Mac |
 | `setupdouble/audio.py` | émission/réception audio, tampon anti-gigue |
 | `setupdouble/keymap.py` | scancodes PC → keycodes Mac |
+| `setupdouble/dashboard.py` | serveur local de la fenêtre de statut (état JSON + actions) |
+| `setupdouble/ui/index.html` | l'interface de la fenêtre de statut |
+| `setupdouble/app.py` | ouvre la fenêtre (WebKit natif sur Mac, Edge en mode appli sous Windows) |
+| `setupdouble/mac_window.py`, `mac_bundle.py` | fenêtre macOS et création de `SetupDouble.app` |
