@@ -69,6 +69,7 @@ le reste tombent exactement comme sur Windows.
 | Couper le son du Mac dans le casque | menu → *Son du Mac dans le casque* |
 | Couper le micro vers le Mac | menu → *Micro vers le Mac* |
 | Volume du casque | touches volume du clavier ou molette de la Scarlett (toujours gérés par Windows) |
+| Mettre à jour SetupDouble | clic droit sur l'icône → *Mettre à jour* (récupère la dernière version sur GitHub, puis redémarre tout seul) |
 
 L'icône affiche **PC** (gris) ou **MAC** (bleu). Une pastille verte indique que le Mac est connecté, une rouge qu'il ne l'est pas.
 
@@ -85,6 +86,27 @@ Raccourcis clavier côté Mac, avec `modifier_layout = "pc"` (défaut) :
 | AltGr | ⌥ Option droite |
 
 Avec `modifier_layout = "mac"`, tu retrouves la disposition Apple : Windows = Cmd, Ctrl = Ctrl.
+
+## Mise à jour
+
+Sur le PC : clic droit sur l'icône → **Mettre à jour**. SetupDouble :
+1. récupère la dernière version depuis GitHub ;
+2. réinstalle les dépendances si elles ont changé ;
+3. redémarre tout seul.
+
+Ton `config.toml` n'est jamais modifié.
+
+Le bouton n'existe qu'à partir de cette version. La toute première fois, mets à jour à la main dans le dossier du projet, puis relance SetupDouble (clic droit → *Quitter*, puis menu Démarrer → *SetupDouble*) :
+
+```powershell
+git pull
+```
+
+Sur le Mac, depuis le dossier du projet :
+
+```bash
+.venv/bin/python -m setupdouble.updater && launchctl kickstart -k gui/$(id -u)/com.setupdouble.agent
+```
 
 ## Mac en veille
 

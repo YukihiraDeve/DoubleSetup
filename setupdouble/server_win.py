@@ -11,6 +11,8 @@ import logging
 import os
 import subprocess
 import sys
+import threading
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -48,12 +50,33 @@ def set_dpi_aware() -> None:
             pass
 
 
-def single_instance() -> bool:
+def single_instance(wait: float = 0.0) -> bool:
+    """Vrai si aucune autre instance ne tourne. ``wait`` : secondes à attendre
+    qu'une ancienne instance se ferme (redémarrage après mise à jour)."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = ctypes.c_void_p
-    handle = kernel32.CreateMutexW(None, False, "Local\\SetupDoubleServer")
-    single_instance.handle = handle  # garder le mutex en vie
-    return ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    deadline = time.monotonic() + wait
+    while True:
+        handle = kernel32.CreateMutexW(None, False, "Local\\SetupDoubleServer")
+        if ctypes.get_last_error() != 183:  # ERROR_ALREADY_EXISTS
+            single_instance.handle = handle  # garder le mutex en vie
+            return True
+        if handle:
+            kernel32.CloseHandle(handle)  # sinon le mutex de l'ancienne instance survivrait
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.3)
+
+
+def restart_command(config_path: str | None) -> list[str]:
+    exe = Path(sys.executable)
+    pythonw = exe.with_name("pythonw.exe")
+    cmd = [str(pythonw if pythonw.exists() else exe), "-m", "setupdouble.server_win",
+           "--wait-instance"]
+    if config_path:
+        cmd += ["--config", config_path]
+    return cmd
 
 
 class Clip:
@@ -131,6 +154,35 @@ def run_tray(server: Server, capture: win_input.InputCapture, log_path: Path,
         capture.stop()
         icon.stop()
 
+    updating = threading.Lock()
+
+    def update(icon, item):
+        if not updating.acquire(blocking=False):
+            notify("Mise à jour déjà en cours…")
+            return
+
+        def work():
+            from .updater import Updater
+            try:
+                notify("Recherche d'une mise à jour…")
+                result = Updater().run()
+                notify(result.message)
+                if result.restart_needed:
+                    time.sleep(1.5)  # laisse le temps de lire la notification
+                    log.info("Redémarrage après mise à jour")
+                    subprocess.Popen(restart_command(server.cfg.get("_path")),
+                                     cwd=str(config_mod.ROOT),
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                                     | getattr(subprocess, "DETACHED_PROCESS", 0))
+                    quit_app(icon, item)
+            except Exception as exc:  # ne jamais faire tomber l'icône
+                log.exception("mise à jour")
+                notify(f"Mise à jour impossible : {exc}")
+            finally:
+                updating.release()
+
+        threading.Thread(target=work, name="update", daemon=True).start()
+
     menu = Menu(
         Item(lambda i: server.status_text(), None, enabled=False),
         Item("Ouvrir SetupDouble…", show_dashboard),
@@ -147,6 +199,7 @@ def run_tray(server: Server, capture: win_input.InputCapture, log_path: Path,
         Item(lambda i: f"Audio : {server.audio_status}", None, enabled=False),
         Menu.SEPARATOR,
         Item("Ouvrir le journal", open_log),
+        Item("Mettre à jour", update),
         Item("Quitter", quit_app),
     )
     icon = pystray.Icon("SetupDouble", make_icon(False, False), "SetupDouble", menu)
@@ -172,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SetupDouble – serveur Windows")
     parser.add_argument("--config", help="chemin du config.toml")
     parser.add_argument("--no-tray", action="store_true", help="sans icône (console)")
+    parser.add_argument("--wait-instance", action="store_true",
+                        help="attend la fermeture de l'instance précédente (après mise à jour)")
     args = parser.parse_args(argv)
 
     try:
@@ -181,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     log_path = setup_logging(cfg["log_level"])
 
-    if not single_instance():
+    if not single_instance(wait=20.0 if args.wait_instance else 0.0):
         log.error("SetupDouble tourne déjà")
         return 1
     set_dpi_aware()
