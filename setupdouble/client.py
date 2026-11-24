@@ -286,6 +286,32 @@ class Client(SettingsMixin):
                 if isinstance(info, dict):
                     self.peer_info = info
                     self.pointer.set_source(info.get("pointer"))
+            elif msg_type == P.SETTINGS:
+                try:
+                    values = json.loads(payload.decode("utf-8"))
+                    self.apply_remote_mouse(values)
+                    self.apply_mouse_settings()
+                except Exception:
+                    log.exception("réglages reçus du serveur")
+                self._info_sent = None
+                self._send_info()
+
+    def apply_mouse_settings(self) -> None:
+        """Applique à chaud la sensibilité et le défilement (self.ccfg) à l'injecteur."""
+        c, inj = self.ccfg, self.injector
+        self.pointer.configure(c["mouse_profile"], float(c["mouse_speed"]), bool(c["match_screen"]))
+        scroll, invert = float(c["scroll_speed"]), bool(c["invert_scroll"])
+        if hasattr(inj, "scroll_factor"):        # Windows, Linux
+            inj.scroll_factor = max(0.1, scroll / 3.0)
+            inj.invert = -1 if invert else 1
+        elif hasattr(inj, "scroll_speed"):       # macOS
+            inj.scroll_speed, inj.invert_scroll = scroll, invert
+        if hasattr(inj, "absolute"):             # Windows : laisser ou non sa propre accélération
+            inj.absolute = not self.pointer.wants_system_ballistics
+
+    def mouse_info(self) -> dict:
+        from .settings import REMOTE_MOUSE_KEYS
+        return {k: self.ccfg[k] for k in REMOTE_MOUSE_KEYS}
 
     def _peer_display_input(self):
         return (self.peer_info.get("display") or {}).get("input")
@@ -448,7 +474,8 @@ class Client(SettingsMixin):
     def info(self) -> dict:
         return {"os": self.os, "name": self.name, "checks": self.local_checks(),
                 "flows": {"mic_rx": self._mic_flowing()}, "wake": self.wake_targets,
-                "display": self.display.info()}
+                "display": self.display.info(), "mouse": self.mouse_info(),
+                "pointer": self.pointer.local}
 
     def status(self) -> dict:
         connected = self.link_state == "connected"

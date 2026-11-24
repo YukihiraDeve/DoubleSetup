@@ -53,6 +53,10 @@ FIELDS: list[tuple[str | None, str, str, tuple[str, ...]]] = [
     ("display", "input", "input", ("server", "client")),
 ]
 
+# Réglages de la machine pilotée modifiables depuis la fenêtre du serveur (appliqués à chaud)
+REMOTE_MOUSE_KEYS = ("mouse_profile", "mouse_speed", "match_screen", "scroll_speed",
+                     "invert_scroll")
+
 _HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9\-.]{0,252})$")
 
 
@@ -179,17 +183,35 @@ class SettingsMixin:
         return info
 
     def settings(self) -> dict:
-        return {"role": self.role, "values": current_values(self.cfg, self.role),
+        values = current_values(self.cfg, self.role)
+        remote = self.remote_mouse() if self.role == "server" else None
+        if remote:  # réglages souris de la machine pilotée, modifiables d'ici
+            values["client"] = remote
+        return {"role": self.role, "values": values,
                 "devices": device_lists(self.cfg, self.role),
+                "remote_mouse": bool(remote),
                 "choices": {f"{s}.{k}": list(v) for (s, k), v in config_mod.CHOICES.items()}}
 
+    def remote_mouse(self) -> dict | None:
+        """Serveur : réglages souris annoncés par la machine pilotée connectée."""
+        session = getattr(self, "session", None)
+        mouse = session.peer_info.get("mouse") if session else None
+        return {k: mouse[k] for k in REMOTE_MOUSE_KEYS if k in mouse} \
+            if isinstance(mouse, dict) else None
+
     def save_settings(self, updates: dict) -> tuple[bool, str]:
+        updates = dict(updates or {})
+        remote_msg = ""
+        if self.role == "server" and "client" in updates:
+            ok, remote_msg = self._send_remote_mouse(updates.pop("client"))
+            if not ok:
+                return False, remote_msg
         try:
             clean = validate(updates, self.role)
         except SettingsError as exc:
             return False, str(exc)
         if not clean:
-            return True, "Rien à changer."
+            return True, remote_msg or "Rien à changer."
         try:
             config_mod.save(clean, self.cfg.get("_path"))
         except Exception as exc:
@@ -204,3 +226,32 @@ class SettingsMixin:
         # laisse le temps à la réponse HTTP de partir
         threading.Timer(0.6, restart).start()
         return True, "Enregistré. SetupDouble redémarre…"
+
+    def _send_remote_mouse(self, values) -> tuple[bool, str]:
+        if not isinstance(values, dict) or set(values) - set(REMOTE_MOUSE_KEYS):
+            return False, "Seuls les réglages de souris de la machine pilotée sont modifiables d'ici."
+        try:
+            clean = validate({"client": values}, "client").get("client", {})
+        except SettingsError as exc:
+            return False, str(exc)
+        session = getattr(self, "session", None)
+        if session is None:
+            return False, "La machine pilotée n'est pas connectée."
+        import json
+        from . import protocol as P
+        try:
+            session.send(P.enc_text(P.SETTINGS, json.dumps(clean)))
+        except OSError as exc:
+            return False, f"Envoi impossible : {exc}"
+        return True, f"Réglages de souris envoyés à {session.name}, appliqués tout de suite."
+
+    def apply_remote_mouse(self, values: dict) -> None:
+        """Machine pilotée : applique et enregistre les réglages reçus du serveur."""
+        clean = validate({"client": {k: v for k, v in values.items()
+                                     if k in REMOTE_MOUSE_KEYS}}, "client").get("client", {})
+        if not clean:
+            return
+        self.cfg["client"].update(clean)
+        if self.cfg.get("_path"):
+            config_mod.save({"client": clean}, self.cfg["_path"])
+        log.info("Réglages souris reçus du serveur : %s", clean)

@@ -133,6 +133,16 @@ class PointerShaper:
         if profile == "local" and self.local.get("os") == "mac":
             self.curve = MacCurve(self.local.get("scaling", 0.6875), not self.local.get("accel"))
 
+    def configure(self, profile: str, speed: float, match_screen: bool) -> None:
+        """Changement à chaud (réglages envoyés par le serveur)."""
+        if profile not in PROFILES:
+            raise ValueError(f"mouse_profile inconnu : {profile!r}")
+        self.profile, self.speed, self.match_screen = profile, float(speed), bool(match_screen)
+        self.curve = None
+        if profile == "local" and self.local.get("os") == "mac":
+            self.curve = MacCurve(self.local.get("scaling", 0.6875), not self.local.get("accel"))
+        self._frac = [0.0, 0.0]
+
     def set_source(self, info: dict | None) -> None:
         self.source = info or {}
 

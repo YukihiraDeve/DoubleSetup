@@ -44,6 +44,7 @@ AUDIO_CTRL = 21  # s->c : flags u8 (bit0 = son Mac->PC, bit1 = micro PC->Mac)
 REQ_MODE = 22    # c->s : u8 (1 = donner le contrôle au Mac, 0 = au PC), depuis l'interface Mac
 REQ_AUDIO = 23   # c->s : flags u8 comme AUDIO_CTRL, depuis l'interface Mac
 INFO = 24        # les deux : JSON utf8 (nom, raccourci, vérifications locales) pour l'interface
+SETTINGS = 25    # s->c : JSON {clé: valeur} de réglages souris, modifiés depuis la fenêtre du serveur
 PING = 30
 PONG = 31
 

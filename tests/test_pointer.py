@@ -115,3 +115,47 @@ def test_server_pointer_settings_reach_the_client():
     finally:
         client.stop()
         server.stop()
+
+
+def test_mouse_settings_changed_from_the_server_window(tmp_path):
+    path = tmp_path / "client.toml"
+    path.write_text('secret = "secret-de-test-123"\n', encoding="utf-8")
+    server = Server(make_cfg())
+    server._pointer_info = lambda: dict(WIN_FAST)
+    restarted = []
+    server.restart = lambda: restarted.append(True)
+    server.input = FakeInput(server)
+    server.start()
+    ccfg = make_cfg()
+    ccfg["_path"] = str(path)
+    inj = RecordingInjector()
+    client = Client(ccfg, inj, use_audio=False)
+    threading.Thread(target=client.session, args=("127.0.0.1", server.bound_port),
+                     daemon=True).start()
+    try:
+        assert wait_for(lambda: server.settings()["remote_mouse"])
+        assert server.settings()["values"]["client"]["mouse_profile"] == "source"
+
+        ok, msg = server.save_settings({"client": {"mouse_profile": "raw", "mouse_speed": 1.5,
+                                                   "scroll_speed": 6}})
+        assert ok and "appliqués tout de suite" in msg and restarted == []
+        assert wait_for(lambda: client.pointer.profile == "raw" and client.pointer.speed == 1.5)
+        # appliqué à chaud : Windows ×2 retiré puis ×1,5
+        server.on_hotkey("toggle")
+        assert wait_for(lambda: client.active)
+        for _ in range(10):
+            server.sink(("move", 4, 0))
+        assert wait_for(lambda: sum(e[1] for e in inj.events if e[0] == "move") == 30)
+        # enregistré chez le client, et visible depuis le serveur
+        from setupdouble import config as config_mod
+        saved = config_mod.load(path)["client"]
+        assert saved["mouse_profile"] == "raw" and saved["scroll_speed"] == 6.0
+        assert wait_for(lambda: server.settings()["values"]["client"]["mouse_speed"] == 1.5)
+
+        bad = server.save_settings({"client": {"server": "1.2.3.4"}})
+        assert not bad[0]
+        bad = server.save_settings({"client": {"mouse_speed": 99}})
+        assert not bad[0] and "entre" in bad[1]
+    finally:
+        client.stop()
+        server.stop()

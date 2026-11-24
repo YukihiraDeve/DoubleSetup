@@ -22,6 +22,7 @@ from . import platforms
 from . import protocol as P
 from .dashboard import check
 from .display import DisplayLink
+from .pointer import describe
 from .hotkeys import pretty
 from .settings import SettingsMixin
 
@@ -246,6 +247,9 @@ class Server(SettingsMixin):
             "checks": checks,
             "peer_reported": bool(peer),
             "can_wake": self.can_wake,
+            "pointer": {"profile": (peer.get("mouse") or {}).get("mouse_profile"),
+                        "source": describe(self._pointer_info()),
+                        "local": describe(peer.get("pointer")) if peer.get("pointer") else ""},
         }
 
     def action(self, name: str, value=None) -> tuple[bool, str]:
