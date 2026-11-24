@@ -22,6 +22,7 @@ from . import dashboard
 from . import platforms
 from . import protocol as P
 from .dashboard import check
+from .display import DisplayLink
 from .settings import SettingsMixin
 
 log = logging.getLogger("setupdouble")
@@ -127,6 +128,7 @@ class Client(SettingsMixin):
         self.womp_check = None     # callable -> bool | None (réveil par le réseau)
         self.restart = None        # callable : relance après changement de réglages
         self.wake_targets: list[dict] = []
+        self.display = DisplayLink(cfg["display"])
         self.dry_run = False
         self._ping_sent = 0.0
         self._info_sent: str | None = None
@@ -249,8 +251,12 @@ class Client(SettingsMixin):
                 self.active = True
                 log.info("Cette machine prend le clavier et la souris")
                 inj.wake()
+                # renfort : le serveur a déjà demandé notre entrée à l'écran
+                self.display.switch(self.display.my_input, delay=self.display.FALLBACK_DELAY,
+                                    still_valid=lambda: self.active)
             elif msg_type == P.LEAVE:
                 self.active = False
+                self.display.switch(self._peer_display_input())
                 inj.release_all()
                 log.info("Le serveur reprend le clavier et la souris")
                 self._push_clipboard()
@@ -274,6 +280,9 @@ class Client(SettingsMixin):
                     continue
                 if isinstance(info, dict):
                     self.peer_info = info
+
+    def _peer_display_input(self):
+        return (self.peer_info.get("display") or {}).get("input")
 
     def _keepalive(self, stop: threading.Event) -> None:
         """Mesure la latence et tient le serveur au courant de l'état de cette machine."""
@@ -374,6 +383,8 @@ class Client(SettingsMixin):
             else:
                 checks.append(check("permission", label, "error", help_text))
         checks += self._sleep_checks()
+        if self.display.enabled:
+            checks.append(self.display.check())
         if not self.use_audio:
             checks.append(check("client_audio", "Audio", "off", "Désactivé"))
             return checks
@@ -428,7 +439,8 @@ class Client(SettingsMixin):
 
     def info(self) -> dict:
         return {"os": self.os, "name": self.name, "checks": self.local_checks(),
-                "flows": {"mic_rx": self._mic_flowing()}, "wake": self.wake_targets}
+                "flows": {"mic_rx": self._mic_flowing()}, "wake": self.wake_targets,
+                "display": self.display.info()}
 
     def status(self) -> dict:
         connected = self.link_state == "connected"
@@ -483,6 +495,8 @@ class Client(SettingsMixin):
                 return False, "Pas encore de journal : l'agent n'a jamais tourné sur cette machine."
             platforms.open_path(log_file)
             return True, ""
+        if name == "display_test":
+            return self.display.test_round_trip(self._peer_display_input())
         if self.link_state != "connected" or self._writer is None:
             return False, "Pas connecté au serveur."
         try:

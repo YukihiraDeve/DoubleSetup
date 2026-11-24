@@ -86,6 +86,11 @@ DEFAULTS: dict = {
         **_client_audio_defaults(sys.platform),
         "client_auto_route": True,  # macOS : bascule l'entrée/sortie par défaut
     },
+    "display": {
+        "enabled": False,  # change l'entrée de l'écran partagé avec la bascule (DDC/CI)
+        "monitor": "",     # écran à piloter ("" = le premier compatible)
+        "input": "",       # entrée de l'écran où est branchée CETTE machine (hdmi1, dp1, 0x11…)
+    },
     "log_level": "INFO",
 }
 

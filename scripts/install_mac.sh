@@ -59,6 +59,10 @@ if [[ "$ROLE" == "client" && $AUDIO_DRIVERS == 1 ]]; then
 else
   echo "Pas de pilote audio virtuel nécessaire."
 fi
+# Bascule de l'entrée de l'écran partagé (DDC/CI)
+if command -v brew >/dev/null && ! command -v m1ddc >/dev/null && [[ "$(uname -m)" == "arm64" ]]; then
+  brew install m1ddc || echo "m1ddc non installé : la bascule d'écran ne sera pas disponible sur ce Mac."
+fi
 if [[ "$ROLE" == "client" && "$(pmset -g | awk '$1 == "womp" {print $2}')" != "1" ]]; then
   echo "Activation du réveil par le réseau (mot de passe administrateur)"
   sudo pmset -a womp 1 || echo "Impossible d'activer le réveil par le réseau (sudo pmset -a womp 1)"

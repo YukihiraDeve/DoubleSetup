@@ -121,6 +121,15 @@ class Dashboard:
                     if not self._token_ok():
                         return self._json(401, {"error": "jeton invalide"})
                     return self._json(200, dash.provider.settings())
+                if path == "/api/display":
+                    if not self._token_ok():
+                        return self._json(401, {"error": "jeton invalide"})
+                    try:
+                        return self._json(200, dash.provider.display_info())
+                    except Exception as exc:
+                        log.exception("écrans")
+                        return self._json(200, {"supported": False, "monitors": [],
+                                                 "error": str(exc)})
                 if path == "/api/status":
                     if not self._token_ok():
                         return self._json(401, {"error": "jeton invalide"})

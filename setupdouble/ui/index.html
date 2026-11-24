@@ -423,6 +423,7 @@
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="general" aria-selected="true">Général</button>
       <button role="tab" data-tab="audio" aria-selected="false">Audio</button>
+      <button role="tab" data-tab="display" aria-selected="false">Écran</button>
       <button role="tab" data-tab="connection" aria-selected="false">Connexion</button>
     </div>
     <div class="body" id="settings-body"></div>
@@ -691,6 +692,88 @@ async function refresh() {
 let settingsData = null;
 let edits = {};
 let activeTab = "general";
+let displayData = null;
+const INPUT_CHOICES = [["hdmi1", "HDMI 1"], ["hdmi2", "HDMI 2"], ["dp1", "DisplayPort 1"],
+  ["dp2", "DisplayPort 2"], ["usbc", "USB-C"], ["dvi1", "DVI 1"], ["vga1", "VGA 1"]];
+const INPUT_CODES = { 0x11: "hdmi1", 0x12: "hdmi2", 0x0f: "dp1", 0x10: "dp2", 0x1b: "usbc", 0x03: "dvi1", 0x01: "vga1" };
+
+function inputName(code) {
+  if (code === null || code === undefined) return "";
+  return INPUT_CODES[code] || "0x" + code.toString(16).padStart(2, "0");
+}
+
+function inputText(code) {
+  const name = inputName(code);
+  const found = INPUT_CHOICES.find(([n]) => n === name);
+  return found ? found[1] : (name || "non définie");
+}
+
+async function loadDisplay() {
+  displayData = { loading: true };
+  if (activeTab === "display") buildSettings();
+  try {
+    displayData = await api("/api/display");
+  } catch (e) {
+    displayData = { supported: false, monitors: [], error: "indisponible" };
+  }
+  if (activeTab === "display") buildSettings();
+}
+
+function displayTab(parts) {
+  const peerName = state ? machineName(state, state.role === "server" ? "client" : "server") : "l'autre machine";
+  const here = state ? machineName(state, state.role) : "cet ordinateur";
+  parts.push(toggleField("Changer d'entrée de l'écran avec le raccourci", "display", "enabled",
+    "Pour un écran branché sur les deux machines : il suit le clavier et la souris (commande DDC/CI)."));
+  const d = displayData;
+  if (!d || d.loading) {
+    parts.push(el("div", { class: "help", style: "padding:10px 0" }, "Recherche des écrans…"));
+    return;
+  }
+  if (!d.supported) {
+    parts.push(el("div", { class: "help", style: "padding:10px 0" },
+      `Aucun outil DDC sur cet ordinateur${d.hint ? ` : ${d.hint}` : ""}.`));
+    return;
+  }
+  const monitors = d.monitors || [];
+  parts.push(selectField("Écran", "display", "monitor",
+    [["", "Premier écran compatible"], ...monitors.map((m) => [m.id, m.name])],
+    monitors.length ? null : "Aucun écran compatible détecté."));
+
+  const current = value("display", "input") ?? "";
+  const select = el("select", { "aria-label": "Entrée de cet ordinateur" });
+  const options = [["", "Non définie"], ...INPUT_CHOICES];
+  if (current && !options.some(([v]) => v === current)) options.push([current, `Code ${current}`]);
+  for (const [v, t] of options) {
+    const opt = el("option", { value: v }, t);
+    if (v === current) opt.selected = true;
+    select.append(opt);
+  }
+  select.addEventListener("change", () => setValue("display", "input", select.value));
+  const detect = el("button", { class: "btn", type: "button" }, "Détecter");
+  detect.addEventListener("click", () => {
+    const wanted = value("display", "monitor") || "";
+    const mon = monitors.find((m) => m.id === wanted) || monitors[0];
+    if (!mon || mon.input === null || mon.input === undefined) {
+      toast("L'écran ne répond pas à cet ordinateur (dock ou câble sans DDC) : choisis l'entrée dans la liste.");
+      return;
+    }
+    const name = inputName(mon.input);
+    if (![...select.options].some((o) => o.value === name)) select.append(el("option", { value: name }, `Code ${name}`));
+    select.value = name;
+    setValue("display", "input", name);
+    toast(`Entrée détectée : ${inputText(mon.input)}`, true);
+  });
+  parts.push(field(`Entrée où est branché ${here}`, [select, detect],
+    "« Détecter » lit l'entrée affichée en ce moment : utilise-le pendant que l'écran montre cet ordinateur."));
+  parts.push(el("div", { class: "help", style: "padding:10px 0 4px" },
+    `Entrée de ${peerName} : ${inputText(d.peer_input)}` +
+    (d.peer_input === null || d.peer_input === undefined ? " (à régler dans SetupDouble sur cette machine)" : "")));
+  const test = el("button", { class: "btn", type: "button" }, "Tester l'aller-retour");
+  test.addEventListener("click", () => act("display_test"));
+  parts.push(field("Test", test,
+    `Affiche ${peerName} pendant 5 s puis revient. Si l'écran ne revient pas tout seul, il n'accepte la commande `
+    + "que depuis l'entrée affichée : appuie sur le bouton de source de l'écran. Enregistre tes réglages avant."));
+}
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -912,6 +995,8 @@ function buildSettings() {
     parts.push(rangeField("Tampon audio", "audio", "latency_ms", 10, 120, 5, (v) => `${v} ms`,
       "Plus petit = moins de retard. Monte-le si le son craque (Wi-Fi)."));
     if (d.devices && d.devices.error) parts.push(el("div", { class: "help" }, `Périphériques indisponibles : ${d.devices.error}`));
+  } else if (activeTab === "display") {
+    displayTab(parts);
   } else {
     if (role === "client") {
       parts.push(textField("Adresse du serveur", "client", "server",
@@ -934,7 +1019,9 @@ async function openSettings(tab) {
     return;
   }
   edits = {};
+  displayData = null;
   activeTab = tab || "general";
+  if (activeTab === "display") loadDisplay();
   for (const t of document.querySelectorAll(".tabs button")) t.setAttribute("aria-selected", String(t.dataset.tab === activeTab));
   buildSettings();
   $("settings").classList.add("open");
@@ -970,6 +1057,7 @@ for (const t of document.querySelectorAll(".tabs button")) {
     activeTab = t.dataset.tab;
     for (const o of document.querySelectorAll(".tabs button")) o.setAttribute("aria-selected", String(o === t));
     buildSettings();
+    if (activeTab === "display" && !displayData) loadDisplay();
   });
 }
 $("open-settings").addEventListener("click", () => openSettings("general"));

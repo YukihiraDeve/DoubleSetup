@@ -21,6 +21,7 @@ from . import __version__
 from . import platforms
 from . import protocol as P
 from .dashboard import check
+from .display import DisplayLink
 from .hotkeys import pretty
 from .settings import SettingsMixin
 
@@ -100,6 +101,7 @@ class Server(SettingsMixin):
         self.restart: Callable[[], None] | None = None  # relance après changement de réglages
         self.wake_store: Path | None = None  # où retenir l'adresse du Mac (server_win)
         self.wake_targets: list[dict] = []
+        self.display = DisplayLink(cfg["display"])
         self._wake_until = 0.0
         self.listeners: list[Callable[[], None]] = []
         self._lock = threading.RLock()
@@ -179,6 +181,8 @@ class Server(SettingsMixin):
         checks = []
         if self.hotkey_check is not None:
             checks.append(self.hotkey_check())
+        if self.display.enabled:
+            checks.append(self.display.check())
         if not self.acfg["enabled"]:
             checks.append(check("server_audio", "Audio", "off", "Désactivé (Réglages → Audio)"))
             return checks
@@ -200,7 +204,8 @@ class Server(SettingsMixin):
         return {"os": self.os, "name": self.name, "hotkey": pretty(self.hotkey_text),
                 "checks": self.local_checks(), "flows": {"sound_rx": self._sound_flowing()},
                 "audio_master": {"sound": self.sound_on, "mic": self.mic_on},
-                "sound_mode": self.acfg["sound_mode"], "mic_mode": self.acfg["mic_mode"]}
+                "sound_mode": self.acfg["sound_mode"], "mic_mode": self.acfg["mic_mode"],
+                "display": self.display.info()}
 
     def status(self) -> dict:
         """État complet pour le tableau de bord (voir dashboard.py)."""
@@ -259,6 +264,8 @@ class Server(SettingsMixin):
                 return False, "L'audio est désactivé (Réglages → Audio)."
             (self.set_sound if name == "sound" else self.set_mic)(bool(value))
             return True, ""
+        if name == "display_test":
+            return self.display.test_round_trip(self._peer_display_input())
         if name == "open_log" and self.open_log is not None:
             self.open_log()
             return True, ""
@@ -280,9 +287,26 @@ class Server(SettingsMixin):
     def on_mode(self, remote: bool) -> None:
         self.remote = remote
         self.events.put(("enter",) if remote else ("leave",))
+        self._switch_display(remote)
         if self.acfg["sound_mode"] == "follow" or self.acfg["mic_mode"] == "follow":
             self._apply_audio()
         self._changed()
+
+    def _peer_display_input(self):
+        s = self.session
+        return ((s.peer_info.get("display") or {}).get("input") if s else None)
+
+    def _switch_display(self, remote: bool) -> None:
+        """L'écran suit le clavier : la machine qu'on quitte envoie la commande, celle qui
+        arrive la renvoie en renfort (certains docks bloquent le DDC d'un côté)."""
+        if not self.display.enabled:
+            return
+        if remote:
+            self.display.switch(self._peer_display_input())
+        else:
+            self.display.switch(self.display.my_input,
+                                delay=self.display.FALLBACK_DELAY if self.session else 0.0,
+                                still_valid=lambda: not self.remote)
 
     def request_mode(self, remote: bool) -> None:
         s = self.session

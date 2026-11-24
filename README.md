@@ -22,6 +22,7 @@
 - **Ton micro** est disponible sur la machine pilotée, tout le temps ou seulement quand tu la pilotes.
 - **Le texte copié** suit la bascule.
 - **Si la machine pilotée dort**, le raccourci la réveille.
+- **Un seul écran pour deux machines ?** Il change d'entrée tout seul avec le raccourci.
 - **Une fenêtre de statut**, façon macOS, montre où sont le clavier et la souris, si tout fonctionne, et permet de tout régler : raccourci, pistes audio, IP, clé.
 - **En jeu**, rien n'intercepte le clavier tant que tu restes sur ta machine : aucune latence ajoutée.
 
@@ -110,6 +111,25 @@ Les mêmes réglages sont dans `config.toml`, commenté.
 | **Windows** | un câble virtuel ([VB-CABLE](https://vb-audio.com/Cable/) A+B) | « CABLE Input », puis « CABLE Output » comme micro dans tes applis |
 | **Linux** | une source « Monitor » PipeWire/PulseAudio | un *null sink* PipeWire |
 
+### Écran partagé
+
+Si le même écran est branché sur les deux machines, SetupDouble peut lui faire changer d'entrée en même temps que le clavier et la souris. Il utilise pour ça la commande DDC/CI, que la plupart des écrans acceptent.
+
+À régler sur **chaque** machine, dans *Réglages → Écran* :
+1. Active **« Changer d'entrée de l'écran avec le raccourci »**.
+2. Pendant que l'écran affiche cette machine, clique sur **Détecter**, ou choisis l'entrée dans la liste (HDMI 1, DisplayPort 1…).
+3. Enregistre.
+
+**Pour vérifier :** **Tester l'aller-retour** affiche l'autre machine 5 secondes puis revient.
+
+**Si un côté ne peut pas commander l'écran** (dock ou adaptateur USB-C qui bloque le DDC), l'autre côté renvoie la commande en renfort. Cela suppose que l'écran accepte une commande venant de l'entrée qui n'est pas affichée : le test te le dit tout de suite.
+
+| Système | Outil |
+|---|---|
+| Windows | intégré, rien à installer |
+| macOS (Apple Silicon) | `m1ddc`, installé par `install.sh` |
+| Linux | `ddcutil`, installé par `install.sh` |
+
 ### Machine pilotée endormie
 
 - **Écran éteint** : tant que le serveur est connecté et la machine sur secteur, seul l'écran s'éteint, et le raccourci le rallume.
@@ -126,6 +146,7 @@ Les mêmes réglages sont dans `config.toml`, commenté.
 | Pas de son dans le casque | *Pistes audio* : bonne sortie ? Sur Mac piloté, BlackHole n'apparaît qu'après un redémarrage |
 | Le son craque | *Réglages → Audio → Tampon audio* : monte à 50-80 ms, ou passe en Ethernet |
 | ² et < inversés | *Réglages → Général → Inverser les touches ² et <* |
+| L'écran ne change pas d'entrée | *Réglages → Écran* sur les deux machines : entrées définies ? Le test d'aller-retour indique quel côté peut commander l'écran. Évite les docks USB-C, qui bloquent souvent le DDC |
 
 Journaux, accessibles aussi par « Ouvrir le journal » :
 - Windows : `%LOCALAPPDATA%\SetupDouble\`
@@ -158,4 +179,5 @@ uv pip install --python .venv/bin/python -r requirements-mac.txt pytest pyflakes
 | `win_inject.py` / `mac_inject.py` / `linux_input.py` | injection clavier et souris |
 | `setupdouble/dashboard.py`, `settings.py`, `ui/index.html` | fenêtre de statut et réglages |
 | `setupdouble/protocol.py`, `audio.py`, `keymap.py` | réseau, audio, tables de touches |
+| `setupdouble/display.py` | bascule de l'entrée de l'écran (DDC/CI) |
 | `setupdouble/updater.py` | mise à jour depuis GitHub |

@@ -77,3 +77,8 @@ mic_gain = 1.0
 # client_capture_device = "BlackHole 2ch"
 # client_mic_device = "BlackHole 16ch"
 client_auto_route = true      # macOS : bascule l'entrée/sortie par défaut sur BlackHole
+
+[display]  # ----- écran branché sur les deux machines (réglable dans Réglages → Écran)
+enabled = false               # l'écran change d'entrée avec la bascule (DDC/CI)
+monitor = ""                  # écran à piloter ("" = le premier compatible)
+input = ""                    # entrée où est branchée CETTE machine : hdmi1, hdmi2, dp1, dp2, usbc ou 0x11…

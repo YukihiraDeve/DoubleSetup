@@ -46,6 +46,9 @@ FIELDS: list[tuple[str | None, str, str, tuple[str, ...]]] = [
     ("audio", "client_capture_device", "device", ("client",)),
     ("audio", "client_mic_device", "device", ("client",)),
     ("audio", "latency_ms", "int:10:200", ("server", "client")),
+    ("display", "enabled", "bool", ("server", "client")),
+    ("display", "monitor", "str", ("server", "client")),
+    ("display", "input", "input", ("server", "client")),
 ]
 
 _HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9\-.]{0,252})$")
@@ -81,6 +84,15 @@ def _validate(section, key, kind, value):
         if not float(lo) <= num <= float(hi):
             raise SettingsError(f"{label} : entre {lo} et {hi}")
         return num
+    if kind == "input":
+        from .display import INPUTS, parse_input
+        try:
+            code = parse_input(value)
+        except ValueError as exc:
+            raise SettingsError(str(exc)) from None
+        if code is None:
+            return ""
+        return next((n for n, c in INPUTS.items() if c == code), f"0x{code:02x}")
     value = "" if value is None else str(value).strip()
     if kind in ("hotkey", "hotkey?"):
         if not value and kind == "hotkey?":
@@ -152,6 +164,17 @@ class SettingsMixin:
 
     role: str
     cfg: dict
+
+    def display_info(self) -> dict:
+        """Écrans détectés pour l'onglet Écran (peut prendre quelques secondes)."""
+        link = getattr(self, "display", None)
+        if link is None:
+            return {"supported": False, "monitors": []}
+        info = link.monitors()
+        info["my_input"] = link.my_input
+        peer = getattr(self, "_peer_display_input", lambda: None)()
+        info["peer_input"] = peer
+        return info
 
     def settings(self) -> dict:
         return {"role": self.role, "values": current_values(self.cfg, self.role),

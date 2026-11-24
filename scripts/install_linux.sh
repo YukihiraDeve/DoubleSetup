@@ -40,13 +40,13 @@ fi
 
 say "1/5 Paquets système (mot de passe administrateur)"
 if command -v apt-get >/dev/null; then
-  sudo apt-get install -y libportaudio2 curl wl-clipboard xclip
+  sudo apt-get install -y libportaudio2 curl wl-clipboard xclip ddcutil
 elif command -v dnf >/dev/null; then
-  sudo dnf install -y portaudio curl wl-clipboard xclip
+  sudo dnf install -y portaudio curl wl-clipboard xclip ddcutil
 elif command -v pacman >/dev/null; then
-  sudo pacman -S --needed --noconfirm portaudio curl wl-clipboard xclip
+  sudo pacman -S --needed --noconfirm portaudio curl wl-clipboard xclip ddcutil
 elif command -v zypper >/dev/null; then
-  sudo zypper install -y portaudio curl wl-clipboard xclip
+  sudo zypper install -y portaudio curl wl-clipboard xclip ddcutil
 else
   echo "Gestionnaire de paquets inconnu : installe PortAudio et wl-clipboard ou xclip toi-même."
 fi
@@ -60,6 +60,13 @@ sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=uinput 
 NEED_RELOGIN=0
 if ! id -nG "$USER" | tr ' ' '\n' | grep -qx input; then
   sudo usermod -aG input "$USER"
+  NEED_RELOGIN=1
+fi
+# Bascule de l'entrée de l'écran (DDC/CI via i2c)
+echo i2c-dev | sudo tee /etc/modules-load.d/setupdouble-i2c.conf >/dev/null
+sudo modprobe i2c-dev || true
+if getent group i2c >/dev/null && ! id -nG "$USER" | tr ' ' '\n' | grep -qx i2c; then
+  sudo usermod -aG i2c "$USER"
   NEED_RELOGIN=1
 fi
 if command -v ufw >/dev/null && sudo ufw status 2>/dev/null | grep -q "Status: active"; then
