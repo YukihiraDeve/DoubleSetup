@@ -36,6 +36,23 @@ def accessibility_granted() -> bool:
         return True  # on ne bloque pas si la vérification échoue
 
 
+def request_accessibility() -> bool:
+    """Affiche la demande d'autorisation de macOS et ajoute ce Python à la liste
+    Accessibilité : il ne reste plus qu'à activer l'interrupteur."""
+    try:
+        import objc
+        from Foundation import NSDictionary
+
+        lib = ctypes.cdll.LoadLibrary(
+            "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        lib.AXIsProcessTrustedWithOptions.restype = ctypes.c_bool
+        lib.AXIsProcessTrustedWithOptions.argtypes = [ctypes.c_void_p]
+        options = NSDictionary.dictionaryWithObject_forKey_(True, "AXTrustedCheckOptionPrompt")
+        return bool(lib.AXIsProcessTrustedWithOptions(objc.pyobjc_id(options)))
+    except Exception:
+        return accessibility_granted()
+
+
 def _double_click_interval() -> float:
     try:
         from AppKit import NSEvent

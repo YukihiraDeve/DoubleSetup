@@ -561,14 +561,14 @@ def main(argv: list[str] | None = None) -> int:
         clipboard = None
     else:
         from . import keymap
-        from .mac_inject import MacInjector, accessibility_granted
+        from .mac_inject import MacInjector, accessibility_granted, request_accessibility
 
         c = cfg["client"]
         injector = MacInjector(keymap.KeyMapper(c["modifier_layout"], c["swap_iso_keys"]),
                                float(c["mouse_speed"]), float(c["scroll_speed"]),
                                bool(c["invert_scroll"]))
         accessibility = accessibility_granted
-        if not accessibility_granted():
+        if not request_accessibility():  # affiche la demande de macOS si besoin
             log.error(
                 "Accessibilité non autorisée : le Mac ne pourra pas recevoir clavier et souris.\n"
                 "Réglages Système → Confidentialité et sécurité → Accessibilité → ajoute :\n  %s",
