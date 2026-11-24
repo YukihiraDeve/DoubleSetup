@@ -100,6 +100,8 @@ def apply_gain(frames: np.ndarray, gain: float) -> np.ndarray:
 def find_device(name: str, kind: str, hostapi: str | None = None) -> int:
     """Retourne l'index du premier périphérique dont le nom contient ``name``.
 
+    ``name`` peut proposer plusieurs essais séparés par « | » (ex.
+    "Scarlett|Focusrite") : le premier qui correspond l'emporte.
     ``kind`` vaut "input" ou "output". Si ``hostapi`` est donné (ex. "WASAPI"),
     les périphériques de cette API sont préférés.
     """
@@ -107,13 +109,17 @@ def find_device(name: str, kind: str, hostapi: str | None = None) -> int:
 
     key = "max_input_channels" if kind == "input" else "max_output_channels"
     apis = sd.query_hostapis()
+    devices = list(enumerate(sd.query_devices()))
     candidates = []
-    for idx, dev in enumerate(sd.query_devices()):
-        if dev[key] <= 0 or name.lower() not in dev["name"].lower():
-            continue
-        api_name = apis[dev["hostapi"]]["name"]
-        score = 0 if hostapi and hostapi.lower() in api_name.lower() else 1
-        candidates.append((score, idx))
+    for wanted in [w.strip().lower() for w in name.split("|") if w.strip()]:
+        for idx, dev in devices:
+            if dev[key] <= 0 or wanted not in dev["name"].lower():
+                continue
+            api_name = apis[dev["hostapi"]]["name"]
+            score = 0 if hostapi and hostapi.lower() in api_name.lower() else 1
+            candidates.append((score, idx))
+        if candidates:
+            break
     if not candidates:
         names = [d["name"] for d in sd.query_devices() if d[key] > 0]
         raise RuntimeError(

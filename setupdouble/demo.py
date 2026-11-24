@@ -45,8 +45,8 @@ class _FakeStream:
 
 def _fake_server_audio(server: Server) -> None:
     server._sound_rx, server._mic_tx = _FakeStream(), _FakeStream()
-    server.sound_device = "Focusrite USB (Scarlett 2i2 4th Gen)"
-    server.mic_device = "Focusrite USB (Scarlett 2i2 4th Gen) · entrée 1"
+    server.sound_device = "Haut-parleurs (Scarlett Solo USB)"
+    server.mic_device = "Microphone (Scarlett Solo USB) · entrée 1"
     server.audio_status = "actif (simulé)"
 
 

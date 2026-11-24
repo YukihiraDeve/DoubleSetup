@@ -27,6 +27,20 @@ done
 
 command -v brew >/dev/null || { echo "Homebrew est requis : https://brew.sh"; exit 1; }
 
+# Le secret est vérifié AVANT les installations, pour ne pas échouer au milieu.
+if [[ ! -f config.toml ]]; then
+  if [[ -z "$SECRET" ]]; then
+    read -r -p "Colle le secret affiché par l'installation Windows : " SECRET
+  fi
+  case "$SECRET" in
+    LE_SECRET*|change-me|"")
+      echo "Remplace LE_SECRET par le vrai secret affiché par install_windows.ps1 sur le PC."; exit 1 ;;
+  esac
+  [[ ${#SECRET} -ge 12 ]] || { echo "Secret trop court (12 caractères minimum)."; exit 1; }
+  [[ "$SECRET" =~ ^[A-Za-z0-9_.-]+$ ]] || {
+    echo "Le secret ne doit contenir que des lettres, chiffres, '.', '_' ou '-'."; exit 1; }
+fi
+
 if [[ $AUDIO == 1 ]]; then
   echo "== 1/5 Pilotes audio virtuels (mot de passe administrateur demandé par macOS)"
   brew list --cask blackhole-2ch >/dev/null 2>&1 || brew install --cask blackhole-2ch
@@ -38,15 +52,11 @@ fi
 
 echo "== 2/5 Environnement Python"
 if ! command -v uv >/dev/null; then brew install uv; fi
-uv venv --python 3.12 .venv
+uv venv --allow-existing --python 3.12 .venv
 uv pip install --python .venv/bin/python -r requirements-mac.txt
 
 echo "== 3/5 Configuration"
 if [[ ! -f config.toml ]]; then
-  if [[ -z "$SECRET" ]]; then
-    read -r -p "Colle le secret affiché par l'installation Windows : " SECRET
-  fi
-  [[ ${#SECRET} -ge 12 ]] || { echo "Secret trop court"; exit 1; }
   sed "s|^secret = \"change-me\"|secret = \"${SECRET}\"|" config.example.toml > config.toml
   if [[ $AUDIO == 0 ]]; then
     sed -i '' 's/^enabled = true/enabled = false/' config.toml

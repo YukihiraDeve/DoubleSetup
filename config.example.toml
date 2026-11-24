@@ -50,8 +50,8 @@ mac_sound = true              # le son du Mac sort dans le casque de la Scarlett
 mic = true                    # le micro de la Scarlett est disponible sur le Mac
 
 # Côté PC
-win_output_device = "Focusrite"   # partie du nom de la sortie Scarlett
-win_input_device = "Focusrite"    # partie du nom de l'entrée Scarlett
+win_output_device = "Scarlett|Focusrite"   # partie du nom de la sortie ; « | » = plusieurs essais
+win_input_device = "Scarlett|Focusrite"    # partie du nom de l'entrée (ex. « Scarlett Solo USB »)
 win_hostapi = "WASAPI"
 mic_channel = 1                   # entrée de la Scarlett où est branché le micro (1 ou 2)
 mac_sound_gain = 1.0

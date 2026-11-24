@@ -179,3 +179,23 @@ def test_audio_udp_loopback():
     finally:
         rx_sock.close()
         tx_sock.close()
+
+
+def test_find_device_alternatives_and_wasapi_preference(monkeypatch):
+    import sounddevice as sd
+
+    devs = [
+        {"name": "Haut-parleurs (Scarlett Solo USB)", "max_input_channels": 0,
+         "max_output_channels": 2, "hostapi": 0},
+        {"name": "Haut-parleurs (Scarlett Solo USB)", "max_input_channels": 0,
+         "max_output_channels": 2, "hostapi": 1},
+        {"name": "Microphone (Scarlett Solo USB)", "max_input_channels": 2,
+         "max_output_channels": 0, "hostapi": 1},
+    ]
+    monkeypatch.setattr(sd, "query_devices", lambda *a: devs)
+    monkeypatch.setattr(sd, "query_hostapis",
+                        lambda *a: [{"name": "MME"}, {"name": "Windows WASAPI"}])
+    assert audio.find_device("Scarlett|Focusrite", "output", "WASAPI") == 1
+    assert audio.find_device("Focusrite|Scarlett", "input", "WASAPI") == 2
+    with pytest.raises(RuntimeError):
+        audio.find_device("Focusrite", "output")
