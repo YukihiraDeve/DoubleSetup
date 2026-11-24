@@ -31,6 +31,8 @@ FIELDS: list[tuple[str | None, str, str, tuple[str, ...]]] = [
     ("client", "clipboard", "bool", ("client",)),
     ("client", "modifier_layout", "choice", ("client",)),
     ("client", "swap_iso_keys", "bool", ("client",)),
+    ("client", "mouse_profile", "choice", ("client",)),
+    ("client", "match_screen", "bool", ("client",)),
     ("client", "mouse_speed", "float:0.1:5", ("client",)),
     ("client", "scroll_speed", "float:0.5:20", ("client",)),
     ("client", "invert_scroll", "bool", ("client",)),

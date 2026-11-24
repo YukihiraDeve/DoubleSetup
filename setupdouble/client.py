@@ -23,6 +23,7 @@ from . import platforms
 from . import protocol as P
 from .dashboard import check
 from .display import DisplayLink
+from .pointer import PointerShaper, describe, local_pointer_info
 from .settings import SettingsMixin
 
 log = logging.getLogger("setupdouble")
@@ -129,6 +130,8 @@ class Client(SettingsMixin):
         self.restart = None        # callable : relance après changement de réglages
         self.wake_targets: list[dict] = []
         self.display = DisplayLink(cfg["display"])
+        self.pointer = PointerShaper(self.ccfg["mouse_profile"], float(self.ccfg["mouse_speed"]),
+                                     bool(self.ccfg["match_screen"]), local_pointer_info())
         self.dry_run = False
         self._ping_sent = 0.0
         self._info_sent: str | None = None
@@ -237,7 +240,9 @@ class Client(SettingsMixin):
             msg_type, payload = P.read_frame(sock)
             if msg_type == P.MOVE:
                 dx, dy = struct.unpack(">hh", payload)
-                inj.move(dx, dy)
+                mx, my = self.pointer.shape(dx, dy)
+                if mx or my:
+                    inj.move(mx, my)
             elif msg_type == P.KEY:
                 sc, flags = struct.unpack(">HB", payload)
                 inj.key(sc, bool(flags & P.KEY_DOWN), bool(flags & P.KEY_REPEAT))
@@ -280,6 +285,7 @@ class Client(SettingsMixin):
                     continue
                 if isinstance(info, dict):
                     self.peer_info = info
+                    self.pointer.set_source(info.get("pointer"))
 
     def _peer_display_input(self):
         return (self.peer_info.get("display") or {}).get("input")
@@ -383,6 +389,8 @@ class Client(SettingsMixin):
             else:
                 checks.append(check("permission", label, "error", help_text))
         checks += self._sleep_checks()
+        state, detail = self.pointer.summary()
+        checks.append(check("mouse", "Sensibilité de la souris", state, detail))
         if self.display.enabled:
             checks.append(self.display.check())
         if not self.use_audio:
@@ -485,6 +493,9 @@ class Client(SettingsMixin):
             "checks": checks,
             "peer_reported": bool(peer),
             "can_wake": False,
+            "pointer": {"profile": self.pointer.profile,
+                        "source": describe(peer.get("pointer")) if connected else "",
+                        "local": describe(self.pointer.local)},
         }
 
     def action(self, name: str, value=None) -> tuple[bool, str]:
@@ -638,7 +649,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         injector, router, clipboard = RecordingInjector(), None, None
     else:
-        injector = platforms.make_injector(cfg["client"])
+        injector = platforms.make_injector(
+            cfg["client"], system_ballistics=cfg["client"]["mouse_profile"] == "local")
         if not platforms.request_input_permission():  # macOS : affiche la demande
             label, help_text = platforms.permission_help()
             log.error("%s : %s", label, help_text)

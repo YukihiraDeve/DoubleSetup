@@ -216,7 +216,7 @@ def win_inject(monkeypatch):
 
 def test_windows_injection_uses_scancodes(win_inject):
     mod, fake = win_inject
-    inj = mod.WinInjector(mouse_speed=1.0)
+    inj = mod.WinInjector(mouse_speed=1.0, absolute=False)
     inj.key(0x10, True)          # touche A (AZERTY) : scancode 0x10
     inj.key(0xE04B, True)        # flèche gauche : étendue
     inj.key(0xE022, True)        # lecture/pause : code virtuel média

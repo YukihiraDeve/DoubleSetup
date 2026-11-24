@@ -26,6 +26,8 @@ MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
 MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP = 0x0020, 0x0040
 MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP = 0x0080, 0x0100
 MOUSEEVENTF_WHEEL, MOUSEEVENTF_HWHEEL = 0x0800, 0x1000
+MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_ABSOLUTE = 0x4000, 0x8000
+SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN = 76, 77, 78, 79
 XBUTTON1, XBUTTON2 = 1, 2
 ES_CONTINUOUS, ES_SYSTEM_REQUIRED, ES_DISPLAY_REQUIRED = 0x80000000, 0x1, 0x2
 
@@ -72,6 +74,10 @@ class INPUT(ctypes.Structure):
 
 user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
 user32.SendInput.restype = wintypes.UINT
+user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+user32.GetCursorPos.restype = wintypes.BOOL
+user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+user32.GetSystemMetrics.restype = ctypes.c_int
 kernel32.SetThreadExecutionState.argtypes = [wintypes.DWORD]
 kernel32.SetThreadExecutionState.restype = wintypes.DWORD
 
@@ -106,8 +112,11 @@ class WinInjector:
     """Même interface que mac_inject.MacInjector."""
 
     def __init__(self, mouse_speed: float = 1.0, scroll_speed: float = 3.0,
-                 invert_scroll: bool = False):
+                 invert_scroll: bool = False, absolute: bool = True):
+        """``absolute`` : positionne le curseur exactement (aucune accélération Windows).
+        Sinon, déplacement relatif : Windows applique sa vitesse et son accélération."""
         self.mouse_speed = mouse_speed
+        self.absolute = absolute
         self.scroll_factor = max(0.1, scroll_speed / 3.0)  # 3 lignes = réglage Windows par défaut
         self.invert = -1 if invert_scroll else 1
         self.keys_down: set[int] = set()
@@ -127,8 +136,22 @@ class WinInjector:
         ix, iy = int(self._fx), int(self._fy)
         self._fx -= ix
         self._fy -= iy
-        if ix or iy:
+        if not (ix or iy):
+            return
+        if not self.absolute:
             _send(mouse_input(ix, iy, flags=MOUSEEVENTF_MOVE))
+            return
+        pos = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(pos))
+        vx, vy = user32.GetSystemMetrics(SM_XVIRTUALSCREEN), user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+        vw = max(2, user32.GetSystemMetrics(SM_CXVIRTUALSCREEN))
+        vh = max(2, user32.GetSystemMetrics(SM_CYVIRTUALSCREEN))
+        x = min(max(pos.x + ix, vx), vx + vw - 1)
+        y = min(max(pos.y + iy, vy), vy + vh - 1)
+        nx = round((x - vx) * 65535 / (vw - 1))
+        ny = round((y - vy) * 65535 / (vh - 1))
+        _send(mouse_input(nx, ny, flags=MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE
+                          | MOUSEEVENTF_VIRTUALDESK))
 
     def button(self, button: int, down: bool) -> None:
         spec = BUTTONS.get(button)

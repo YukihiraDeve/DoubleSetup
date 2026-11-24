@@ -123,9 +123,10 @@ def make_clipboard():
 
 # --- Machine pilotée ----------------------------------------------------------------------
 
-def make_injector(ccfg: dict):
-    speed, scroll, invert = (float(ccfg["mouse_speed"]), float(ccfg["scroll_speed"]),
-                             bool(ccfg["invert_scroll"]))
+def make_injector(ccfg: dict, system_ballistics: bool = False):
+    """``system_ballistics`` : laisser l'OS appliquer son accélération (profil « local »).
+    La vitesse de la souris est appliquée en amont par pointer.PointerShaper."""
+    speed, scroll, invert = 1.0, float(ccfg["scroll_speed"]), bool(ccfg["invert_scroll"])
     if OS == MAC:
         from . import keymap
         from .mac_inject import MacInjector
@@ -133,7 +134,7 @@ def make_injector(ccfg: dict):
                            speed, scroll, invert)
     if OS == WINDOWS:
         from .win_inject import WinInjector
-        return WinInjector(speed, scroll, invert)
+        return WinInjector(speed, scroll, invert, absolute=not system_ballistics)
     from .linux_input import LinuxInjector
     return LinuxInjector(speed, scroll, invert)
 

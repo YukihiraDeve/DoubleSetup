@@ -65,6 +65,8 @@ DEFAULTS: dict = {
         "name": "",
         "ui_port": 47811,
         "prevent_sleep": "power",  # power, always ou never
+        "mouse_profile": "source",  # source : comme la machine source ; raw : brut ; local : comme ici
+        "match_screen": False,      # adapte la vitesse à la différence de taille des écrans
     },
     "audio": {
         "enabled": True,
@@ -113,6 +115,7 @@ CHOICES = {
     ("client", "modifier_layout"): ("pc", "mac"),
     ("server", "modifier_layout"): ("pc", "mac"),
     ("client", "prevent_sleep"): ("power", "always", "never"),
+    ("client", "mouse_profile"): ("source", "raw", "local"),
     ("audio", "sound_mode"): ("mix", "follow"),
     ("audio", "mic_mode"): ("always", "follow"),
 }

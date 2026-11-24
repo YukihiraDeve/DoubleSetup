@@ -97,6 +97,22 @@ Tout se règle dans **⚙ Réglages** ; l'enregistrement redémarre SetupDouble.
 
 Les mêmes réglages sont dans `config.toml`, commenté.
 
+### Sensibilité de la souris
+
+Dans *Réglages → Général → Souris*, sur la machine pilotée :
+
+| Profil | Effet |
+|---|---|
+| **Comme sur la machine source** (défaut) | le curseur bouge exactement comme sur le serveur, avec ses réglages. Si l'accélération y est désactivée, c'est du 1 pour 1 |
+| **Brute, sans accélération** | un mouvement de souris = un pixel, sans la vitesse ni l'accélération d'aucun système. Comme en jeu |
+| **Comme sur cette machine** | reprend les réglages locaux : accélération et vitesse de suivi de macOS (reproduites), accélération de Windows, ou profil libinput sous Linux |
+
+S'y ajoutent :
+- **Vitesse** : un multiplicateur, de 0,2× à 3× ;
+- **Adapter à la taille des écrans** : traverser l'écran demande le même geste des deux côtés, même avec des résolutions différentes.
+
+La fenêtre affiche les réglages détectés des deux côtés, par exemple « Windows : vitesse 10/20, sans accélération ».
+
 ### Modes audio
 
 - **Les deux en même temps** (défaut) : le son de la machine pilotée se mélange à celui du serveur dans le casque, en permanence.

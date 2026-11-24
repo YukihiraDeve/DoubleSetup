@@ -953,7 +953,29 @@ function buildSettings() {
       parts.push(selectField("Touches Ctrl et Windows", "client", "modifier_layout",
         [["pc", "Ctrl = ⌘, Windows = Ctrl (comme sur un PC)"], ["mac", "Windows = ⌘, Ctrl = Ctrl (façon Apple)"]],
         "Sur un Mac piloté : avec « comme sur un PC », Ctrl+C copie."));
-      parts.push(rangeField("Vitesse du curseur", "client", "mouse_speed", 0.2, 3, 0.1, (v) => `${Number(v).toFixed(1)}×`));
+      const srcOs = OS_LABEL[s?.machines.server.os] || "la machine source";
+      const hereOs = OS_LABEL[s?.machines.client.os] || "cette machine";
+      const localHelp = { mac: "Reproduit l'accélération et la vitesse de suivi de macOS (approximation).",
+                          windows: "Laisse Windows appliquer sa vitesse et son accélération.",
+                          linux: "Laisse Linux (libinput) appliquer son profil d'accélération." };
+      parts.push(el("div", { class: "section-title" }, "Souris"));
+      parts.push(choiceField("Sensibilité", "client", "mouse_profile", [
+        ["source", `Comme sur ${srcOs}`,
+         `Le curseur bouge exactement comme sur ${srcOs}, avec ses réglages. Idéal si l'accélération y est désactivée.`],
+        ["raw", "Brute, sans accélération",
+         "Un mouvement de souris = un pixel, sans vitesse ni accélération des systèmes. Comme en jeu."],
+        ["local", `Comme sur ${hereOs}`, localHelp[s?.machines.client.os] || "Utilise les réglages de cette machine."],
+      ]));
+      if (s?.pointer) {
+        const lines = [s.pointer.source && `Source · ${s.pointer.source}`, `Ici · ${s.pointer.local}`].filter(Boolean);
+        parts.push(el("div", { class: "help", style: "padding:4px 0 8px; display:grid; gap:2px" },
+          ...lines.map((l) => el("span", {}, l))));
+      }
+      parts.push(rangeField("Vitesse", "client", "mouse_speed", 0.2, 3, 0.05, (v) => `${Number(v).toFixed(2)}×`,
+        "Multiplicateur appliqué en plus du profil. 1,00× = sans changement."));
+      parts.push(toggleField("Adapter à la taille des écrans", "client", "match_screen",
+        "Traverser l'écran demande le même geste sur les deux machines, même si leurs résolutions diffèrent."));
+      parts.push(el("div", { class: "section-title" }, "Clavier et défilement"));
       parts.push(rangeField("Vitesse de défilement", "client", "scroll_speed", 1, 10, 0.5, (v) => `${Number(v)} lignes`));
       parts.push(toggleField("Inverser le défilement", "client", "invert_scroll"));
       parts.push(toggleField("Inverser les touches ² et <", "client", "swap_iso_keys",

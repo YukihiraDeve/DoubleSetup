@@ -205,7 +205,7 @@ class Server(SettingsMixin):
                 "checks": self.local_checks(), "flows": {"sound_rx": self._sound_flowing()},
                 "audio_master": {"sound": self.sound_on, "mic": self.mic_on},
                 "sound_mode": self.acfg["sound_mode"], "mic_mode": self.acfg["mic_mode"],
-                "display": self.display.info()}
+                "display": self.display.info(), "pointer": self._pointer_info()}
 
     def status(self) -> dict:
         """État complet pour le tableau de bord (voir dashboard.py)."""
@@ -291,6 +291,18 @@ class Server(SettingsMixin):
         if self.acfg["sound_mode"] == "follow" or self.acfg["mic_mode"] == "follow":
             self._apply_audio()
         self._changed()
+
+    def _pointer_info(self) -> dict:
+        """Réglages souris de cette machine (vitesse, accélération, écran), relus toutes les 30 s."""
+        from .pointer import local_pointer_info
+        stamp, info = getattr(self, "_pointer_cache", (0.0, None))
+        if info is None or time.monotonic() - stamp > 30:
+            try:
+                info = local_pointer_info()
+            except Exception:
+                info = {}
+            self._pointer_cache = (time.monotonic(), info)
+        return info
 
     def _peer_display_input(self):
         s = self.session

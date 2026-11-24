@@ -76,6 +76,8 @@ def main(argv: list[str] | None = None) -> int:
 
     server = Server(cfg)
     server.os = "windows"
+    server._pointer_info = lambda: {"os": "windows", "level": 10, "speed": 1.0, "accel": False,
+                                    "screen": [2560, 1440]}
     server.save_settings = lambda updates: (True, "Démo : réglages non enregistrés.")
     server._start_audio = lambda: _fake_server_audio(server)
     server.input = _FakeInput(server)
