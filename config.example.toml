@@ -1,0 +1,61 @@
+# SetupDouble – configuration (le même fichier sert au PC et au Mac).
+# Copie ce fichier en config.toml sur les deux machines.
+
+# Secret partagé : IDENTIQUE sur le PC et sur le Mac (12 caractères minimum).
+# Les scripts d'installation en génèrent un automatiquement.
+secret = "change-me"
+
+log_level = "INFO"   # DEBUG pour tout voir
+
+[server]   # ----- PC Windows (clavier, souris et Scarlett branchés dessus)
+bind = "0.0.0.0"
+control_port = 47801          # TCP
+audio_port = 47802            # UDP (son du Mac reçu par le PC)
+beacon = true                 # annonce le PC sur le réseau (le Mac le trouve tout seul)
+
+# Raccourcis : ctrl, alt, shift, win + une touche (lettre, chiffre, f1..f24,
+# space, left/right/up/down, home, end, pageup, pagedown, insert, delete,
+# scrolllock, pause, numpad0..9). Les touches s'entendent selon leur nom sur
+# le clavier AZERTY (« a » = la touche A).
+hotkey_toggle = "ctrl+alt+space"   # bascule PC <-> Mac
+hotkey_mac = ""                     # facultatif : aller directement au Mac (ex. "ctrl+alt+right")
+hotkey_pc = ""                      # facultatif : revenir directement au PC (ex. "ctrl+alt+left")
+
+clipboard = true              # partage du texte copié au moment de la bascule
+name = ""                     # nom affiché (défaut : nom du PC)
+
+[client]   # ----- Mac
+server = ""                   # IP du PC ; vide = découverte automatique
+control_port = 47801
+audio_port = 47803            # UDP (micro reçu par le Mac)
+
+# "pc"  : Ctrl = Cmd (Ctrl+C / Ctrl+V comme sur Windows), Windows = Ctrl, Alt = Option
+# "mac" : Windows = Cmd, Alt = Option, Ctrl = Ctrl (disposition Apple)
+modifier_layout = "pc"
+swap_iso_keys = false         # mets true si les touches ² et < sont inversées sur le Mac
+mouse_speed = 1.0             # multiplicateur de vitesse du curseur
+scroll_speed = 3.0            # lignes par cran de molette
+invert_scroll = false
+clipboard = true
+name = ""
+
+[audio]
+enabled = true
+sample_rate = 48000
+block_ms = 5                  # taille des paquets
+latency_ms = 30               # tampon : monte à 50-80 si ça craque en Wi-Fi
+mac_sound = true              # le son du Mac sort dans le casque de la Scarlett
+mic = true                    # le micro de la Scarlett est disponible sur le Mac
+
+# Côté PC
+win_output_device = "Focusrite"   # partie du nom de la sortie Scarlett
+win_input_device = "Focusrite"    # partie du nom de l'entrée Scarlett
+win_hostapi = "WASAPI"
+mic_channel = 1                   # entrée de la Scarlett où est branché le micro (1 ou 2)
+mac_sound_gain = 1.0
+mic_gain = 1.0
+
+# Côté Mac (pilotes virtuels BlackHole)
+mac_capture_device = "BlackHole 2ch"    # le Mac joue son son ici -> envoyé au PC
+mac_mic_device = "BlackHole 16ch"       # le micro du PC arrive ici -> choisi comme micro
+mac_auto_route = true                   # bascule automatiquement l'entrée/sortie du Mac
